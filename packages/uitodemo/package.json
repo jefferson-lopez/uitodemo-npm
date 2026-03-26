@@ -4,7 +4,37 @@
   "private": false,
   "type": "module",
   "sideEffects": false,
+  "author": "Jefferson Lopez",
+  "license": "MIT",
   "description": "Timeline-driven UI demo player for product walkthroughs.",
+  "keywords": [
+    "react",
+    "demo",
+    "timeline",
+    "walkthrough",
+    "product-demo",
+    "ui"
+  ],
+  "homepage": "https://github.com/jefferson-lopez/uitodemo-npm#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jefferson-lopez/uitodemo-npm.git",
+    "directory": "packages/uitodemo"
+  },
+  "bugs": {
+    "url": "https://github.com/jefferson-lopez/uitodemo-npm/issues"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/jefferson-lopez"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=10"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -22,7 +52,9 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsup",

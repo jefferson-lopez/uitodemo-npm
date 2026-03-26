@@ -1,6 +1,7 @@
 {
   "name": "uitodemo-monorepo",
   "private": true,
+  "license": "MIT",
   "packageManager": "pnpm@10.6.5",
   "scripts": {
     "dev": "turbo dev",
