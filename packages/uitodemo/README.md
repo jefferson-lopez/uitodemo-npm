@@ -1,38 +1,104 @@
 # `uitodemo`
 
-`uitodemo` is a small timeline-driven UI demo player extracted from the landing demo system in this repo.
+`uitodemo` is a React library for showing product demos with real UI.
 
-It is designed for:
+Instead of exporting a video, you render your actual interface and describe the flow with a timeline. The library replays typing, clicks, scrolling, pauses, and cursor movement so the demo feels interactive while staying easy to maintain.
 
+It works well for:
+
+- landing pages
 - product walkthroughs
-- hero demos
-- onboarding simulations
-- fake but believable in-app interactions
+- onboarding flows
+- documentation examples
+- in-app feature previews
 
-## What it includes
+## Installation
 
-- `DemoPlayer`: the main player component
-- `DemoControls`: optional playback controls
-- timeline engine
-- playback hooks
-- DOM helpers for `click`, `scroll`, `type`, `wait`, `highlight`
+```bash
+npm i uitodemo
+```
+
+You can also use:
+
+```bash
+pnpm add uitodemo
+yarn add uitodemo
+```
+
+## Quick start
+
+Wrap your UI with `DemoPlayer`, add `data-demo` attributes to the elements you want to target, and pass a timeline.
+
+```tsx
+import { DemoPlayer, type DemoTimeline } from "uitodemo";
+
+const timeline: DemoTimeline = [
+  { type: "focus", target: "search", cursor: "text" },
+  { type: "type", target: "search", value: "Cold brew", delay: 90, cursor: "text" },
+  { type: "wait", delay: 500 },
+  { type: "click", target: "product-1", cursor: "pointer", hover: true },
+];
+
+export function Example() {
+  return (
+    <DemoPlayer
+      timeline={timeline}
+      isActive
+      cursor={{ enabled: true, hideNativeCursor: true }}
+    >
+      <div>
+        <input data-demo="search" readOnly defaultValue="" />
+        <button data-demo="product-1">Open product</button>
+      </div>
+    </DemoPlayer>
+  );
+}
+```
+
+## How to use it
+
+1. Render your normal UI inside `DemoPlayer`.
+2. Add `data-demo="some-id"` to the elements you want the demo to control.
+3. Create a timeline with steps like `focus`, `type`, `scroll`, `click`, and `wait`.
+4. Activate playback and let the story run.
+
+## Basic example
+
+```tsx
+import { DemoPlayer, type DemoTimeline } from "uitodemo";
+
+const timeline: DemoTimeline = [
+  { type: "focus", target: "email", cursor: "text" },
+  { type: "type", target: "email", value: "hello@uitodemo.dev", delay: 80, cursor: "text" },
+  { type: "wait", delay: 400 },
+  { type: "click", target: "continue", cursor: "pointer", hover: true },
+];
+
+export function SignupDemo() {
+  return (
+    <DemoPlayer timeline={timeline} isActive>
+      <form>
+        <input data-demo="email" readOnly defaultValue="" />
+        <button type="button" data-demo="continue">
+          Continue
+        </button>
+      </form>
+    </DemoPlayer>
+  );
+}
+```
+
+## What the package includes
+
+- `DemoPlayer` for rendering and replaying the demo
+- `DemoControls` for optional playback controls
+- timeline helpers and playback hooks
 - simulated cursor support
-
-## Folder architecture
-
-The package is split into a few focused layers:
-
-- `src/components`: rendering primitives such as `DemoPlayer` and `DemoControls`
-- `src/hooks`: playback and cursor coordination hooks
-- `src/engine`: timeline runner and DOM action execution
-- `src/cursor`: cursor geometry and positioning helpers
-- `src/config`: shared defaults such as timings, root target setup, and frame radius presets
-
-This separation keeps the runner logic reusable while the demo presentation stays in the component layer.
+- testing helpers from `uitodemo/testing`
 
 ## Public API
 
-For normal usage, import only from the package root:
+Import the package from the root:
 
 ```tsx
 import {
@@ -46,7 +112,7 @@ import {
 } from "uitodemo";
 ```
 
-For tests and timeline metadata helpers, use the testing subpath:
+For tests and timeline metadata helpers:
 
 ```tsx
 import {
@@ -57,242 +123,13 @@ import {
 } from "uitodemo/testing";
 ```
 
-## Core idea
+## Good use cases
 
-You render your real UI inside `DemoPlayer` and annotate clickable/typable elements with `data-demo="target-id"`.
+- show a search flow in a homepage hero
+- preview dashboard interactions before signup
+- explain a feature in docs without recording a video
+- build believable onboarding simulations with real components
 
-Then you pass a timeline:
+## Development
 
-```tsx
-const timeline = [
-  { type: "focus", target: "search", cursor: "text", label: "Focus search" },
-  { type: "type", target: "search", value: "Coffee", delay: 90, cursor: "text" },
-  { type: "scroll", target: "product-1", align: "center", delay: 700, cursor: "arrow", label: "Bring product into view" },
-  { type: "wait", delay: 600, label: "Review results" },
-  { type: "click", target: "product-1", cursor: "pointer", hover: true, label: "Open product" },
-];
-```
-
-## Quick example
-
-```tsx
-import { DemoPlayer, type DemoTimeline } from "uitodemo";
-
-const timeline: DemoTimeline = [
-  { type: "focus", target: "search", cursor: "text" },
-  { type: "type", target: "search", value: "Coffee", delay: 90, cursor: "text" },
-  { type: "scroll", target: "row-1", align: "center", delay: 700, cursor: "arrow" },
-  { type: "click", target: "row-1", cursor: "pointer", hover: true },
-];
-
-export function Example() {
-  return (
-    <DemoPlayer
-      timeline={timeline}
-      isActive
-      frameBorderRadius="xl"
-      cursor={{
-        enabled: true,
-        theme: "black",
-        hideNativeCursor: true,
-      }}
-    >
-      <div>
-        <input data-demo="search" readOnly defaultValue="" />
-        <button data-demo="row-1">Open</button>
-      </div>
-    </DemoPlayer>
-  );
-}
-```
-
-## Timing configuration
-
-The player exposes shared timing overrides through the `timings` prop.
-
-```tsx
-<DemoPlayer
-  timeline={timeline}
-  isActive
-  timings={{
-    clickSettleMs: 450,
-    clickActionMs: 320,
-    typeSettleMs: 1000,
-  }}
->
-  <YourUI />
-</DemoPlayer>
-```
-
-You can also import the built-in defaults:
-
-```tsx
-import { DEFAULT_DEMO_TIMINGS } from "uitodemo";
-```
-
-These defaults are meant to control the baseline rhythm of the player:
-
-- cursor arrival before a press begins
-- click press duration before `element.click()`
-- default settle time for scroll steps
-- initial pause before typing starts
-- how long playback controls stay visible after pointer activity
-
-Use the timeline for intentional storytelling beats such as "pause and let the user read this card". Use `timings` for the global feel of the player.
-
-## Recipes
-
-### 1. Search and open a result
-
-```tsx
-const timeline: DemoTimeline = [
-  { type: "focus", target: "search", cursor: "text", label: "Focus search" },
-  { type: "type", target: "search", value: "Cold brew", delay: 90, cursor: "text" },
-  { type: "wait", delay: 500, label: "Pause briefly" },
-  { type: "click", target: "product-2", cursor: "pointer", hover: true, label: "Open product" },
-];
-```
-
-### 2. Simulate a real UI action on click
-
-`click` steps call `element.click()`, so the target can mutate live state.
-
-```tsx
-function Example() {
-  const [items, setItems] = useState([{ id: "product-1", name: "Cold Brew" }]);
-
-  return (
-    <DemoPlayer
-      timeline={[
-        { type: "click", target: "remove-product-1", cursor: "pointer", hover: true },
-      ]}
-      isActive
-    >
-      <button
-        type="button"
-        data-demo="remove-product-1"
-        onClick={() => {
-          setItems((current) => current.filter((item) => item.id !== "product-1"));
-        }}
-      >
-        Remove
-      </button>
-    </DemoPlayer>
-  );
-}
-```
-
-### 3. Scroll to a target before clicking it
-
-```tsx
-const timeline: DemoTimeline = [
-  { type: "scroll", target: "product-8", align: "center", delay: 700, cursor: "arrow", label: "Scroll to product" },
-  { type: "click", target: "product-8", cursor: "pointer", hover: true, label: "Open product" },
-];
-```
-
-### 4. Use your own controls renderer
-
-```tsx
-import { DemoControls, DemoPlayer } from "uitodemo";
-
-<DemoPlayer
-  timeline={timeline}
-  isActive
-  renderControls={(controls) => <DemoControls {...controls} />}
->
-  <YourUI />
-</DemoPlayer>;
-```
-
-### 5. Adjust the frame shell without touching the core UI
-
-```tsx
-<DemoPlayer
-  timeline={timeline}
-  isActive
-  className="shadow-2xl"
-  frameBorderRadius="lg"
->
-  <YourUI />
-</DemoPlayer>
-```
-
-Use `frameBorderRadius` for the visible stage radius. Styling the outer `className` alone does not change the inner frame rounding.
-
-### 6. Dashboard flow with live state changes
-
-```tsx
-function Example() {
-  const [items, setItems] = useState([
-    { id: "product-1", name: "Cold Brew" },
-    { id: "product-2", name: "Oat Latte" },
-  ]);
-
-  return (
-    <DemoPlayer
-      isActive
-      cursor={{ enabled: true, hideNativeCursor: true }}
-      timeline={[
-        { type: "click", target: "product-2", cursor: "pointer", hover: true, label: "Open product" },
-        { type: "wait", delay: 500, label: "Read details" },
-        { type: "click", target: "remove-product-2", cursor: "pointer", hover: true, label: "Remove product" },
-      ]}
-    >
-      <div>
-        {items.map((item) => (
-          <article key={item.id} data-demo={item.id}>
-            <strong>{item.name}</strong>
-            <button
-              type="button"
-              data-demo={`remove-${item.id}`}
-              onClick={() => {
-                setItems((current) => current.filter((entry) => entry.id !== item.id));
-              }}
-            >
-              Remove
-            </button>
-          </article>
-        ))}
-      </div>
-    </DemoPlayer>
-  );
-}
-```
-
-## Cursor assets
-
-The package now resolves its built-in cursor artwork internally. Consumers do not need to copy files into `public/`.
-
-## Testing
-
-From the monorepo root:
-
-```bash
-pnpm --filter uitodemo test
-```
-
-This runs a small baseline suite against the built package for timing metadata and exported defaults.
-
-The current test coverage focuses on:
-
-- duration metadata
-- exported defaults
-- auto-injected cursor bootstrap step
-- runner playback for `click`, `wait`, `seek`, and `restart`
-
-## Monorepo context
-
-Inside this repo, the package lives at `packages/uitodemo` and the demo site at `apps/www`.
-
-## Build
-
-From the monorepo root:
-
-```bash
-pnpm --filter uitodemo build
-```
-
-## Publishing notes
-
-Consumers can install the package and use it directly without copying static cursor files.
+Inside this repository, the package lives in `packages/uitodemo` and the demo site lives in `apps/www`.
