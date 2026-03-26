@@ -1,24 +1,25 @@
 "use client";
 
 import { createTimelineRunner } from "../engine/timeline-runner";
-import type { DemoHighlightState, DemoStatus, DemoTimeline } from "../types";
+import type { DemoStatus, DemoTimeline, DemoTimingConfig } from "../types";
 import { useEffect, useRef, useState, type RefObject } from "react";
 
 type UseDemoControllerOptions = {
   rootRef: RefObject<HTMLElement | null>;
   timeline: DemoTimeline;
   isActive: boolean;
+  timings: DemoTimingConfig;
 };
 
 export function useDemoController({
   rootRef,
   timeline,
   isActive,
+  timings,
 }: UseDemoControllerOptions) {
   const runnerRef = useRef<ReturnType<typeof createTimelineRunner> | null>(null);
   const shouldAutoplayRef = useRef(isActive);
   const [status, setStatus] = useState<DemoStatus>("idle");
-  const [highlight, setHighlight] = useState<DemoHighlightState>(null);
   const [progress, setProgress] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
@@ -38,7 +39,6 @@ export function useDemoController({
     const isSeeking = seekTargetStepIndex !== null;
 
     runnerRef.current?.cancel();
-    setHighlight(null);
 
     if (!isSeeking) {
       setStatus("idle");
@@ -51,7 +51,7 @@ export function useDemoController({
     const runner = createTimelineRunner({
       root,
       timeline,
-      onHighlightChange: setHighlight,
+      timings,
       onStatusChange: setStatus,
       onStepChange: setCurrentStepIndex,
       onProgressChange: setProgress,
@@ -80,7 +80,7 @@ export function useDemoController({
         runnerRef.current = null;
       }
     };
-  }, [isActive, rootRef, runnerVersion, seekTargetStepIndex, timeline]);
+  }, [isActive, rootRef, runnerVersion, seekTargetStepIndex, timeline, timings]);
 
   useEffect(() => {
     const runner = runnerRef.current;
@@ -96,7 +96,6 @@ export function useDemoController({
 
   return {
     status,
-    highlight,
     progress,
     elapsedMs,
     durationMs,

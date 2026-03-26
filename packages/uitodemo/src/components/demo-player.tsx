@@ -1,140 +1,12 @@
 "use client";
 
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { DEFAULT_DEMO_TIMINGS, FRAME_BORDER_RADIUS_MAP, ROOT_DEMO_TARGET, resolveDemoTimeline } from "../config/defaults";
 import { useDemoController } from "../hooks/use-demo-controller";
+import { useDemoCursor } from "../hooks/use-demo-cursor";
 import { useTimeline } from "../hooks/use-timeline";
-import type {
-  DemoCursorVariant,
-  DemoPlayerProps,
-  DemoRadiusPreset,
-  DemoStep,
-} from "../types";
+import type { DemoPlayerProps } from "../types";
 import DemoControls from "./demo-controls";
-import DemoHighlight from "./demo-highlight";
-import { cursorAssets } from "./cursor-assets";
-
-function getTargetAnchorPoint(
-  rect: DOMRect,
-  anchor: string | undefined,
-  offsetX: number,
-  offsetY: number,
-) {
-  let x = rect.left + rect.width / 2;
-  let y = rect.top + rect.height / 2;
-
-  switch (anchor) {
-    case "left-center":
-      x = rect.left;
-      y = rect.top + rect.height / 2;
-      break;
-    case "right-center":
-      x = rect.right;
-      y = rect.top + rect.height / 2;
-      break;
-    case "top-center":
-      y = rect.top;
-      break;
-    case "bottom-center":
-      y = rect.bottom;
-      break;
-    case "top-left":
-      x = rect.left;
-      y = rect.top;
-      break;
-    case "top-right":
-      x = rect.right;
-      y = rect.top;
-      break;
-    case "bottom-left":
-      x = rect.left;
-      y = rect.bottom;
-      break;
-    case "bottom-right":
-      x = rect.right;
-      y = rect.bottom;
-      break;
-    default:
-      break;
-  }
-
-  return { x: x + offsetX, y: y + offsetY };
-}
-
-function getStableHumanizedOffset(
-  key: string,
-  variant: DemoCursorVariant,
-  stepIndex: number,
-  rect: DOMRect,
-) {
-  const seedSource = `${key}:${variant}:${stepIndex}`;
-  let hash = 0;
-
-  for (let index = 0; index < seedSource.length; index += 1) {
-    hash = (hash * 31 + seedSource.charCodeAt(index)) >>> 0;
-  }
-
-  const normalizedX = ((hash & 0xffff) / 0xffff) * 2 - 1;
-  const normalizedY = (((hash >>> 16) & 0xffff) / 0xffff) * 2 - 1;
-  const maxOffsetX =
-    variant === "text"
-      ? Math.min(7, rect.width * 0.08)
-      : Math.min(12, rect.width * 0.12);
-  const maxOffsetY =
-    variant === "text"
-      ? Math.min(3, rect.height * 0.08)
-      : Math.min(8, rect.height * 0.16);
-
-  return {
-    x: normalizedX * maxOffsetX,
-    y: normalizedY * maxOffsetY,
-  };
-}
-
-function getDefaultInteractiveOffset(
-  rect: DOMRect,
-  variant: DemoCursorVariant,
-  element: HTMLElement,
-) {
-  if (variant === "text") {
-    return {
-      x: 0,
-      y: -8,
-    };
-  }
-
-  const isButtonLike = Boolean(
-    element.matches("button,[data-slot='button']") ||
-    element.closest("button,[data-slot='button']"),
-  );
-
-  if (isButtonLike) {
-    return {
-      x: Math.min(2, rect.width * 0.02),
-      y: Math.min(5, rect.height * 0.14),
-    };
-  }
-
-  return { x: 0, y: 0 };
-}
-
-const CURSOR_CLICK_SETTLE_DELAY_MS = 380;
-const CURSOR_CLICK_PRESS_DURATION_MS = 320;
-const ROOT_DEMO_TARGET = "app";
-const CURSOR_START_STEP_DELAY_MS = 450;
-const FRAME_BORDER_RADIUS_MAP: Record<DemoRadiusPreset, number> = {
-  none: 0,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-};
 
 export default function DemoPlayer({
   timeline,
@@ -148,6 +20,7 @@ export default function DemoPlayer({
   defaultScale = 0.9,
   showControls = true,
   cursor = false,
+  timings,
   onStatusChange,
   onPlaybackChange,
   renderControls,
@@ -155,16 +28,9 @@ export default function DemoPlayer({
 }: DemoPlayerProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const scaleHostRef = useRef<HTMLDivElement | null>(null);
-  const cursorElementRef = useRef<HTMLDivElement | null>(null);
-  const hoveredTargetRef = useRef<HTMLElement | null>(null);
   const hideControlsTimerRef = useRef<number | null>(null);
-  const cursorAnimationFrameRef = useRef<number | null>(null);
-  const cursorPositionRef = useRef({ x: 0, y: 0, targetX: 0, targetY: 0 });
-  const hasPlacedCursorRef = useRef(false);
   const userPointerDownRef = useRef(false);
   const hasPlayedIntroRef = useRef(false);
-  const cursorClickStartTimerRef = useRef<number | null>(null);
-  const cursorClickTimerRef = useRef<number | null>(null);
   const [scale, setScale] = useState<number | null>(null);
   const [hasPointerActivity, setHasPointerActivity] = useState(false);
   const [isPointerInsideDemo, setIsPointerInsideDemo] = useState(false);
@@ -177,52 +43,17 @@ export default function DemoPlayer({
 
   const resolvedIsActive = isActive && isPlaybackReady;
   const resolvedFrameBorderRadius = FRAME_BORDER_RADIUS_MAP[frameBorderRadius];
-  const cursorConfig =
-    typeof cursor === "boolean"
-      ? {
-          enabled: cursor,
-          clickPulse: true,
-          theme: "black" as const,
-          hideNativeCursor: false,
-        }
-      : {
-          enabled: cursor.enabled ?? true,
-          clickPulse: cursor.clickPulse ?? true,
-          theme: cursor.theme ?? "black",
-          hideNativeCursor: cursor.hideNativeCursor ?? false,
-        };
+  const resolvedTimings = useMemo(
+    () => ({ ...DEFAULT_DEMO_TIMINGS, ...timings }),
+    [timings],
+  );
   const baseTimeline = useTimeline(timeline);
-  const resolvedTimeline = useMemo(() => {
-    if (!cursorConfig.enabled) return baseTimeline;
-
-    const firstStep = baseTimeline[0];
-    const alreadyStartsAtRoot =
-      firstStep?.type === "highlight" &&
-      firstStep.target === ROOT_DEMO_TARGET &&
-      firstStep.cursor === "arrow";
-
-    if (alreadyStartsAtRoot) return baseTimeline;
-
-    return [
-      {
-        type: "highlight" as const,
-        target: ROOT_DEMO_TARGET,
-        cursor: "arrow" as const,
-        label: "Start",
-        delay: CURSOR_START_STEP_DELAY_MS,
-      },
-      ...baseTimeline,
-    ];
-  }, [baseTimeline, cursorConfig.enabled]);
-  const [cursorState, setCursorState] = useState<{
-    visible: boolean;
-    clicking: boolean;
-    variant: DemoCursorVariant;
-  }>({
-    visible: cursorConfig.enabled,
-    clicking: false,
-    variant: "arrow",
-  });
+  const cursorEnabled =
+    typeof cursor === "boolean" ? cursor : (cursor.enabled ?? true);
+  const resolvedTimeline = useMemo(
+    () => resolveDemoTimeline(baseTimeline, cursorEnabled, resolvedTimings),
+    [baseTimeline, cursorEnabled, resolvedTimings],
+  );
   const {
     status,
     progress,
@@ -233,11 +64,26 @@ export default function DemoPlayer({
     pause,
     restart,
     runnerVersion,
-    highlight,
   } = useDemoController({
     rootRef,
     timeline: resolvedTimeline,
     isActive: resolvedIsActive,
+    timings: resolvedTimings,
+  });
+  const {
+    cursorConfig,
+    cursorElementRef,
+    cursorSrc,
+    cursorState,
+    cursorVisualStyle,
+  } = useDemoCursor({
+    rootRef,
+    cursor,
+    timeline: resolvedTimeline,
+    currentStepIndex,
+    runnerVersion,
+    scale,
+    timings: resolvedTimings,
   });
 
   const areControlsVisible =
@@ -331,239 +177,6 @@ export default function DemoPlayer({
     return () => {
       if (hideControlsTimerRef.current)
         window.clearTimeout(hideControlsTimerRef.current);
-      if (cursorClickTimerRef.current)
-        window.clearTimeout(cursorClickTimerRef.current);
-      if (cursorClickStartTimerRef.current)
-        window.clearTimeout(cursorClickStartTimerRef.current);
-      if (cursorAnimationFrameRef.current)
-        window.cancelAnimationFrame(cursorAnimationFrameRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!cursorConfig.enabled || !cursorState.visible) return;
-
-    const cursorElement = cursorElementRef.current;
-    if (!cursorElement) return;
-
-    const animate = () => {
-      const current = cursorPositionRef.current;
-      const nextX = current.x + (current.targetX - current.x) * 0.075;
-      const nextY = current.y + (current.targetY - current.y) * 0.075;
-
-      current.x =
-        Math.abs(current.targetX - nextX) < 0.08 ? current.targetX : nextX;
-      current.y =
-        Math.abs(current.targetY - nextY) < 0.08 ? current.targetY : nextY;
-
-      cursorElement.style.setProperty("--cursor-x", `${current.x}px`);
-      cursorElement.style.setProperty("--cursor-y", `${current.y}px`);
-
-      cursorAnimationFrameRef.current = window.requestAnimationFrame(animate);
-    };
-
-    cursorAnimationFrameRef.current = window.requestAnimationFrame(animate);
-
-    return () => {
-      if (cursorAnimationFrameRef.current) {
-        window.cancelAnimationFrame(cursorAnimationFrameRef.current);
-        cursorAnimationFrameRef.current = null;
-      }
-    };
-  }, [cursorConfig.enabled, cursorState.visible]);
-
-  useEffect(() => {
-    if (!cursorConfig.enabled) {
-      setCursorState((prev) => ({ ...prev, visible: false, clicking: false }));
-      hasPlacedCursorRef.current = false;
-      cursorPositionRef.current = { x: 0, y: 0, targetX: 0, targetY: 0 };
-      if (hoveredTargetRef.current) {
-        delete hoveredTargetRef.current.dataset.demoHovered;
-        hoveredTargetRef.current = null;
-      }
-      return;
-    }
-
-    setCursorState((prev) =>
-      prev.visible ? prev : { ...prev, visible: true },
-    );
-
-    const root = rootRef.current;
-    const step = resolvedTimeline[currentStepIndex] as DemoStep | undefined;
-    const target = step?.target;
-
-    if (!root || !target) return;
-
-    const targetElement = root.querySelector<HTMLElement>(
-      `[data-demo="${target}"],[data-demo-id="${target}"]`,
-    );
-    if (!targetElement) return;
-
-    if (
-      hoveredTargetRef.current &&
-      hoveredTargetRef.current !== targetElement
-    ) {
-      delete hoveredTargetRef.current.dataset.demoHovered;
-      hoveredTargetRef.current = null;
-    }
-
-    if (step?.hover) {
-      targetElement.dataset.demoHovered = "true";
-      hoveredTargetRef.current = targetElement;
-    } else if (hoveredTargetRef.current === targetElement) {
-      delete targetElement.dataset.demoHovered;
-      hoveredTargetRef.current = null;
-    }
-
-    const rootRect = root.getBoundingClientRect();
-    const targetRect = targetElement.getBoundingClientRect();
-    const requestedVariant = targetElement.dataset.demoCursor as
-      | DemoCursorVariant
-      | undefined;
-    const interactiveSelector =
-      "button,a,[role='button'],[data-slot='button'],[data-demo-interactive='true']";
-    const isInteractive =
-      targetElement.matches(interactiveSelector) ||
-      !!targetElement.closest(interactiveSelector);
-    const isTextTarget = Boolean(
-      targetElement.matches(
-        "input,textarea,[contenteditable='true'],[data-slot='input-group-control']",
-      ) ||
-      targetElement.closest(
-        "input,textarea,[contenteditable='true'],[data-slot='input-group-control']",
-      ),
-    );
-    const resolvedVariant: DemoCursorVariant =
-      step?.cursor ??
-      requestedVariant ??
-      (isTextTarget ? "text" : isInteractive ? "pointer" : "arrow");
-    const defaultOffset = getDefaultInteractiveOffset(
-      targetRect,
-      resolvedVariant,
-      targetElement,
-    );
-    const humanizedOffset = getStableHumanizedOffset(
-      target,
-      resolvedVariant,
-      currentStepIndex,
-      targetRect,
-    );
-    const anchorPoint = getTargetAnchorPoint(
-      targetRect,
-      targetElement.dataset.demoAnchor,
-      Number(targetElement.dataset.demoOffsetX ?? 0) +
-        defaultOffset.x +
-        humanizedOffset.x,
-      Number(targetElement.dataset.demoOffsetY ?? 0) +
-        defaultOffset.y +
-        humanizedOffset.y,
-    );
-    const currentScale = Math.max(scale ?? 1, 0.01);
-    const nextX = (anchorPoint.x - rootRect.left) / currentScale;
-    const nextY = (anchorPoint.y - rootRect.top) / currentScale;
-    const shouldAnimateCursorPress =
-      cursorConfig.clickPulse &&
-      (step?.type === "click" ||
-        ((step?.type === "focus" || step?.type === "type") &&
-          resolvedVariant === "text"));
-    const cursorPosition = cursorPositionRef.current;
-    const isFirstCursorPlacement = !hasPlacedCursorRef.current;
-
-    cursorPosition.targetX = nextX;
-    cursorPosition.targetY = nextY;
-
-    if (isFirstCursorPlacement) {
-      const initialX = root.clientWidth / 2;
-      const initialY = root.clientHeight / 2;
-      cursorPosition.x = initialX;
-      cursorPosition.y = initialY;
-      cursorElementRef.current?.style.setProperty(
-        "--cursor-x",
-        `${initialX}px`,
-      );
-      cursorElementRef.current?.style.setProperty(
-        "--cursor-y",
-        `${initialY}px`,
-      );
-      hasPlacedCursorRef.current = true;
-    }
-
-    setCursorState((prev) => ({
-      ...prev,
-      visible: true,
-      variant: resolvedVariant,
-      clicking: shouldAnimateCursorPress ? prev.clicking : false,
-    }));
-
-    if (shouldAnimateCursorPress) {
-      if (cursorClickStartTimerRef.current) {
-        window.clearTimeout(cursorClickStartTimerRef.current);
-        cursorClickStartTimerRef.current = null;
-      }
-      if (cursorClickTimerRef.current) {
-        window.clearTimeout(cursorClickTimerRef.current);
-        cursorClickTimerRef.current = null;
-      }
-
-      setCursorState((prev) => ({ ...prev, clicking: false }));
-      cursorClickStartTimerRef.current = window.setTimeout(() => {
-        setCursorState((prev) => ({ ...prev, clicking: true }));
-        cursorClickStartTimerRef.current = null;
-
-        cursorClickTimerRef.current = window.setTimeout(() => {
-          setCursorState((prev) => ({ ...prev, clicking: false }));
-          cursorClickTimerRef.current = null;
-        }, CURSOR_CLICK_PRESS_DURATION_MS);
-      }, CURSOR_CLICK_SETTLE_DELAY_MS);
-    }
-  }, [
-    cursorConfig.clickPulse,
-    cursorConfig.enabled,
-    cursorState.visible,
-    currentStepIndex,
-    resolvedTimeline,
-    scale,
-  ]);
-
-  useEffect(() => {
-    if (!cursorConfig.enabled) return;
-    setCursorState((prev) => ({ ...prev, visible: true }));
-  }, [cursorConfig.enabled]);
-
-  useEffect(() => {
-    if (!cursorConfig.enabled || hasPlacedCursorRef.current) return;
-
-    const root = rootRef.current;
-    if (!root) return;
-
-    const rootRect = root.getBoundingClientRect();
-    const initialX = root.clientWidth / 2;
-    const initialY = root.clientHeight / 2;
-
-    cursorPositionRef.current = {
-      x: initialX,
-      y: initialY,
-      targetX: initialX,
-      targetY: initialY,
-    };
-
-    cursorElementRef.current?.style.setProperty("--cursor-x", `${initialX}px`);
-    cursorElementRef.current?.style.setProperty("--cursor-y", `${initialY}px`);
-    hasPlacedCursorRef.current = true;
-    setCursorState((prev) => ({ ...prev, visible: true }));
-  }, [cursorConfig.enabled, scale]);
-
-  useEffect(() => {
-    hasPlacedCursorRef.current = false;
-    cursorPositionRef.current = { x: 0, y: 0, targetX: 0, targetY: 0 };
-  }, [runnerVersion]);
-
-  useEffect(() => {
-    return () => {
-      if (hoveredTargetRef.current) {
-        delete hoveredTargetRef.current.dataset.demoHovered;
-        hoveredTargetRef.current = null;
-      }
     };
   }, []);
 
@@ -582,7 +195,7 @@ export default function DemoPlayer({
     hideControlsTimerRef.current = window.setTimeout(() => {
       setHasPointerActivity(false);
       hideControlsTimerRef.current = null;
-    }, 1200);
+    }, resolvedTimings.pointerActivityMs);
   };
 
   const clearPointerActivity = () => {
@@ -595,15 +208,6 @@ export default function DemoPlayer({
 
     setHasPointerActivity(false);
   };
-
-  const cursorTheme = cursorAssets[cursorConfig.theme];
-  const cursorSrc = cursorTheme[cursorState.variant] ?? cursorTheme.arrow;
-  const cursorVisualStyle: CSSProperties =
-    cursorState.variant === "pointer"
-      ? { transform: "translate(-11px, -6px)", transformOrigin: "top left" }
-      : cursorState.variant === "text"
-        ? { transform: "translate(-1px, -3px)", transformOrigin: "top left" }
-        : { transform: "translate(-3px, -3px)", transformOrigin: "top left" };
 
   const outerStyle: CSSProperties = {
     position: "relative",
@@ -650,6 +254,7 @@ export default function DemoPlayer({
                 minHeight: 0,
                 height: "100%",
                 userSelect: "none",
+                outline: "none",
                 cursor:
                   cursorConfig.hideNativeCursor && isPointerInsideDemo
                     ? "none"
@@ -814,13 +419,12 @@ export default function DemoPlayer({
               ) : null}
 
               <div
-                data-demo={ROOT_DEMO_TARGET}
-                key={runnerVersion}
+                  data-demo={ROOT_DEMO_TARGET}
+                  key={runnerVersion}
                 style={{ pointerEvents: "none", height: "100%" }}
               >
                 {children}
               </div>
-              <DemoHighlight highlight={highlight} />
               {cursorConfig.enabled && cursorState.visible ? (
                 <div
                   aria-hidden="true"

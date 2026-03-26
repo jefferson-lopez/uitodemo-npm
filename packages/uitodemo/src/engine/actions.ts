@@ -1,15 +1,11 @@
-import { dispatchInputEvents, setElementValue } from "./dom";
-import type { DemoHighlightState, DemoStep } from "../types";
-
-const CLICK_SETTLE_DELAY_MS = 380;
-const CLICK_ACTION_DELAY_MS = 320;
-const TYPE_SETTLE_DELAY_MS = 900;
+import { dispatchInputEvents, scrollDemoTargetIntoView, setElementValue } from "./dom";
+import type { DemoStep, DemoTimingConfig } from "../types";
 
 type DemoActionContext = {
   root: HTMLElement;
   getTarget: (target: string) => HTMLElement | null;
-  onHighlightChange: (highlight: DemoHighlightState) => void;
   wait: (ms: number) => Promise<boolean>;
+  timings: DemoTimingConfig;
   instant?: boolean;
 };
 
@@ -17,6 +13,8 @@ export async function runDemoStep(step: DemoStep, context: DemoActionContext) {
   switch (step.type) {
     case "wait":
       return context.wait(step.delay ?? 0);
+    case "scroll":
+      return scrollTarget(step, context);
     case "click":
       return clickTarget(step, context);
     case "focus":
@@ -30,6 +28,22 @@ export async function runDemoStep(step: DemoStep, context: DemoActionContext) {
   }
 }
 
+async function scrollTarget(step: DemoStep, context: DemoActionContext) {
+  if (!step.target) return true;
+
+  const element = context.getTarget(step.target);
+  if (!element) return true;
+
+  scrollDemoTargetIntoView(context.root, element, {
+    behavior: context.instant ? "auto" : "smooth",
+    align: step.align,
+  });
+
+  if (context.instant) return true;
+
+  return context.wait(step.delay ?? context.timings.scrollSettleMs);
+}
+
 async function clickTarget(step: DemoStep, context: DemoActionContext) {
   if (!step.target) return true;
 
@@ -37,12 +51,12 @@ async function clickTarget(step: DemoStep, context: DemoActionContext) {
   if (!element) return true;
 
   if (!context.instant) {
-    const completed = await context.wait(CLICK_SETTLE_DELAY_MS);
+    const completed = await context.wait(context.timings.clickSettleMs);
     if (!completed) return false;
   }
 
   if (!context.instant) {
-    const completed = await context.wait(CLICK_ACTION_DELAY_MS);
+    const completed = await context.wait(context.timings.clickActionMs);
     if (!completed) return false;
   }
 
@@ -54,10 +68,18 @@ async function clickTarget(step: DemoStep, context: DemoActionContext) {
 function focusTarget(step: DemoStep, context: DemoActionContext) {
   if (!step.target) return true;
 
+  const element = context.getTarget(step.target);
+  if (!element) return true;
+
   return true;
 }
 
 async function highlightTarget(step: DemoStep, context: DemoActionContext) {
+  if (!step.target) return true;
+
+  const element = context.getTarget(step.target);
+  if (!element) return true;
+
   if (context.instant) return true;
 
   if ((step.delay ?? 0) > 0) {
@@ -85,7 +107,7 @@ async function typeIntoTarget(step: DemoStep, context: DemoActionContext) {
   }
 
   {
-    const completed = await context.wait(TYPE_SETTLE_DELAY_MS);
+    const completed = await context.wait(context.timings.typeSettleMs);
     if (!completed) return false;
   }
 

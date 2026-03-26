@@ -4,12 +4,12 @@ import {
   getStepDuration,
   getTimelineDuration,
 } from "./timeline-metadata";
-import type { DemoHighlightState, DemoStatus, DemoTimeline } from "../types";
+import type { DemoStatus, DemoTimeline, DemoTimingConfig } from "../types";
 
 type TimelineRunnerOptions = {
   root: HTMLElement;
   timeline: DemoTimeline;
-  onHighlightChange: (highlight: DemoHighlightState) => void;
+  timings: DemoTimingConfig;
   onStatusChange: (status: DemoStatus) => void;
   onStepChange?: (stepIndex: number) => void;
   onProgressChange?: (progress: number) => void;
@@ -19,7 +19,7 @@ type TimelineRunnerOptions = {
 export function createTimelineRunner({
   root,
   timeline,
-  onHighlightChange,
+  timings,
   onStatusChange,
   onStepChange,
   onProgressChange,
@@ -30,7 +30,7 @@ export function createTimelineRunner({
   let cancelled = false;
   let loopPromise: Promise<void> | null = null;
   let elapsedMs = 0;
-  const totalDurationMs = getTimelineDuration(timeline);
+  const totalDurationMs = getTimelineDuration(timeline, timings);
 
   const syncTime = () => {
     const safeElapsedMs = Math.min(elapsedMs, totalDurationMs);
@@ -70,8 +70,8 @@ export function createTimelineRunner({
       const completedStep = await runDemoStep(step, {
         root,
         getTarget: (target) => getDemoTarget(root, target),
-        onHighlightChange,
         wait,
+        timings,
       });
 
       if (!completedStep || cancelled) return;
@@ -94,7 +94,6 @@ export function createTimelineRunner({
       if (status === "completed") {
         currentStepIndex = 0;
         elapsedMs = 0;
-        onHighlightChange(null);
         onStepChange?.(0);
         syncTime();
       }
@@ -119,7 +118,6 @@ export function createTimelineRunner({
     restart() {
       currentStepIndex = 0;
       elapsedMs = 0;
-      onHighlightChange(null);
       onStepChange?.(0);
       syncTime();
       status = "playing";
@@ -133,12 +131,10 @@ export function createTimelineRunner({
     },
     cancel() {
       cancelled = true;
-      onHighlightChange(null);
     },
     async seek(targetStepIndex: number, autoplay: boolean) {
       currentStepIndex = 0;
       elapsedMs = 0;
-      onHighlightChange(null);
       syncTime();
 
       const safeTargetStepIndex = Math.max(
@@ -153,14 +149,14 @@ export function createTimelineRunner({
         const completedStep = await runDemoStep(step, {
           root,
           getTarget: (target) => getDemoTarget(root, target),
-          onHighlightChange,
           wait,
+          timings,
           instant: true,
         });
 
         if (!completedStep || cancelled) return;
 
-        elapsedMs += getStepDuration(step);
+        elapsedMs += getStepDuration(step, timings);
         syncTime();
       }
 

@@ -16,10 +16,11 @@ export type DemoStatus = "idle" | "playing" | "paused" | "completed";
  * - `click`: moves to a target and triggers `element.click()`
  * - `focus`: moves to a target and switches the cursor state without mutating the DOM
  * - `highlight`: keeps the cursor/highlight anchored to a target for a timed beat
+ * - `scroll`: scrolls a target into view before continuing
  * - `type`: types text into an input-like target
  * - `wait`: pauses timeline progression for a fixed amount of time
  */
-export type DemoStepType = "click" | "focus" | "highlight" | "type" | "wait";
+export type DemoStepType = "click" | "focus" | "highlight" | "scroll" | "type" | "wait";
 
 /**
  * Built-in simulated cursor variants.
@@ -65,6 +66,11 @@ export type DemoCursorVariant =
  * ```tsx
  * { type: "highlight", target: "app", cursor: "arrow", delay: 450, label: "Start" }
  * ```
+ *
+ * @example
+ * ```tsx
+ * { type: "scroll", target: "product-8", align: "center", delay: 700, cursor: "arrow", label: "Scroll to product" }
+ * ```
  */
 export type DemoStep = {
   /**
@@ -76,7 +82,7 @@ export type DemoStep = {
   /**
    * Target id matched against `data-demo` or `data-demo-id`.
    *
-   * Required for `click`, `focus`, `highlight`, and `type` steps.
+   * Required for `click`, `focus`, `highlight`, `scroll`, and `type` steps.
    * Ignored by `wait` steps.
    */
   target?: string;
@@ -93,6 +99,7 @@ export type DemoStep = {
    * - `wait`: total wait duration
    * - `type`: per-character delay
    * - `highlight`: how long to hold that highlighted state
+   * - `scroll`: how long to allow the scroll motion to settle
    */
   delay?: number;
   /**
@@ -107,6 +114,14 @@ export type DemoStep = {
    * If omitted, the player infers a cursor from the target element type.
    */
   cursor?: DemoCursorVariant;
+  /**
+   * Vertical alignment used by `scroll` steps.
+   *
+   * Passed to `scrollIntoView({ block })`.
+   *
+   * @default "center"
+   */
+  align?: ScrollLogicalPosition;
   /**
    * Whether the target should show a hovered state before a click.
    *
@@ -127,6 +142,7 @@ export type DemoStep = {
  * const timeline: DemoTimeline = [
  *   { type: "focus", target: "search", cursor: "text", label: "Focus search" },
  *   { type: "type", target: "search", value: "Cold brew", delay: 90, cursor: "text" },
+ *   { type: "scroll", target: "product-2", align: "center", delay: 700, cursor: "arrow", label: "Bring product into view" },
  *   { type: "wait", delay: 500, label: "Review results" },
  *   { type: "click", target: "product-2", cursor: "pointer", hover: true, label: "Open product" },
  * ];
@@ -142,27 +158,6 @@ export type DemoStep = {
  * ```
  */
 export type DemoTimeline = DemoStep[];
-
-/**
- * Highlight overlay state for the currently focused target.
- *
- * Coordinates are relative to the demo root, not the viewport.
- */
-export type DemoHighlightState = {
-  /**
-   * Target id currently being highlighted.
-   */
-  target: string;
-  /**
-   * Bounding rect relative to the demo root.
-   */
-  rect: {
-    top: number;
-    left: number;
-    width: number;
-    height: number;
-  };
-} | null;
 
 /**
  * Read-only playback snapshot exposed to consumers.
@@ -230,6 +225,44 @@ export type DemoCursorConfig = {
    * @default false
    */
   hideNativeCursor?: boolean;
+};
+
+/**
+ * Shared timing configuration used by the demo runner and cursor layer.
+ */
+export type DemoTimingConfig = {
+  /**
+   * Default settle time for scroll steps when they omit `delay`.
+   */
+  scrollSettleMs: number;
+  /**
+   * Delay before a click press begins after the cursor reaches the target.
+   */
+  clickSettleMs: number;
+  /**
+   * Delay between the start of a press and the actual `click()` execution.
+   */
+  clickActionMs: number;
+  /**
+   * Initial pause before text entry begins.
+   */
+  typeSettleMs: number;
+  /**
+   * Delay before the cursor press animation starts.
+   */
+  cursorClickSettleMs: number;
+  /**
+   * Duration of the cursor press animation.
+   */
+  cursorClickPressMs: number;
+  /**
+   * Duration of the auto-injected cursor bootstrap step.
+   */
+  cursorStartStepMs: number;
+  /**
+   * How long playback controls stay visible after pointer activity.
+   */
+  pointerActivityMs: number;
 };
 
 /**
@@ -377,6 +410,13 @@ export type DemoPlayerProps = {
    * @default false
    */
   cursor?: boolean | DemoCursorConfig;
+  /**
+   * Optional timing overrides for the runner and cursor behavior.
+   *
+   * Use this when you want slower or faster click/type/cursor pacing without
+   * editing the timeline data itself.
+   */
+  timings?: Partial<DemoTimingConfig>;
   /**
    * Called whenever playback status changes.
    *
