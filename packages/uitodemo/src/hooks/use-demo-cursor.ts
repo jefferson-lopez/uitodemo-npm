@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { cursorAssets } from "../components/cursor-assets";
 import { getDefaultInteractiveOffset, getCursorVisualTransform, getStableHumanizedOffset, getTargetAnchorPoint } from "../cursor/geometry";
+import { getScrollParent } from "../engine/dom";
 import type { DemoCursorConfig, DemoCursorVariant, DemoStep, DemoTimeline, DemoTimingConfig } from "../types";
 
 type UseDemoCursorOptions = {
@@ -37,6 +38,18 @@ function resolveCursorConfig(cursor: boolean | DemoCursorConfig) {
       };
 }
 
+function shouldReduceDemoCursorMotion() {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+
+  return (
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+    window.matchMedia("(pointer: coarse)").matches ||
+    window.matchMedia("(hover: none)").matches
+  );
+}
+
 export function useDemoCursor({
   rootRef,
   cursor,
@@ -47,11 +60,11 @@ export function useDemoCursor({
   timings,
 }: UseDemoCursorOptions) {
   const cursorConfig = useMemo(() => resolveCursorConfig(cursor), [cursor]);
+  const [motionReduced, setMotionReduced] = useState(false);
   const cursorElementRef = useRef<HTMLDivElement | null>(null);
   const hoveredTargetRef = useRef<HTMLElement | null>(null);
   const activeStepTypeRef = useRef<DemoStep["type"] | null>(null);
   const cursorAnimationFrameRef = useRef<number | null>(null);
-  const cursorTrackingFrameRef = useRef<number | null>(null);
   const cursorPositionRef = useRef({ x: 0, y: 0, targetX: 0, targetY: 0 });
   const cursorClickStartTimerRef = useRef<number | null>(null);
   const cursorClickTimerRef = useRef<number | null>(null);
@@ -61,18 +74,34 @@ export function useDemoCursor({
     clicking: false,
     variant: "arrow",
   });
+  const cursorEnabled = cursorConfig.enabled && !motionReduced;
 
   useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const coarsePointerQuery = window.matchMedia("(pointer: coarse)");
+    const noHoverQuery = window.matchMedia("(hover: none)");
+    const syncMotionPreference = () => {
+      setMotionReduced(shouldReduceDemoCursorMotion());
+    };
+
+    syncMotionPreference();
+    reducedMotionQuery.addEventListener("change", syncMotionPreference);
+    coarsePointerQuery.addEventListener("change", syncMotionPreference);
+    noHoverQuery.addEventListener("change", syncMotionPreference);
+
     return () => {
-      if (cursorClickTimerRef.current) window.clearTimeout(cursorClickTimerRef.current);
-      if (cursorClickStartTimerRef.current) window.clearTimeout(cursorClickStartTimerRef.current);
-      if (cursorAnimationFrameRef.current) window.cancelAnimationFrame(cursorAnimationFrameRef.current);
-      if (cursorTrackingFrameRef.current) window.cancelAnimationFrame(cursorTrackingFrameRef.current);
+      reducedMotionQuery.removeEventListener("change", syncMotionPreference);
+      coarsePointerQuery.removeEventListener("change", syncMotionPreference);
+      noHoverQuery.removeEventListener("change", syncMotionPreference);
     };
   }, []);
 
-  useEffect(() => {
-    if (!cursorConfig.enabled || !cursorState.visible) return;
+  const kickCursorAnimation = () => {
+    if (cursorAnimationFrameRef.current) return;
 
     const cursorElement = cursorElementRef.current;
     if (!cursorElement) return;
@@ -80,29 +109,42 @@ export function useDemoCursor({
     const animate = () => {
       const current = cursorPositionRef.current;
       const easing = activeStepTypeRef.current === "scroll" ? 0.24 : 0.075;
-      const nextX = current.x + (current.targetX - current.x) * easing;
-      const nextY = current.y + (current.targetY - current.y) * easing;
+      const deltaX = current.targetX - current.x;
+      const deltaY = current.targetY - current.y;
+      const nextX = current.x + deltaX * easing;
+      const nextY = current.y + deltaY * easing;
 
-      current.x = Math.abs(current.targetX - nextX) < 0.08 ? current.targetX : nextX;
-      current.y = Math.abs(current.targetY - nextY) < 0.08 ? current.targetY : nextY;
+      current.x = Math.abs(deltaX) < 0.08 ? current.targetX : nextX;
+      current.y = Math.abs(deltaY) < 0.08 ? current.targetY : nextY;
 
       cursorElement.style.setProperty("--cursor-x", `${current.x}px`);
       cursorElement.style.setProperty("--cursor-y", `${current.y}px`);
+
+      const settled =
+        Math.abs(current.targetX - current.x) < 0.08 &&
+        Math.abs(current.targetY - current.y) < 0.08;
+
+      if (settled) {
+        cursorAnimationFrameRef.current = null;
+        return;
+      }
+
       cursorAnimationFrameRef.current = window.requestAnimationFrame(animate);
     };
 
     cursorAnimationFrameRef.current = window.requestAnimationFrame(animate);
-
-    return () => {
-      if (cursorAnimationFrameRef.current) {
-        window.cancelAnimationFrame(cursorAnimationFrameRef.current);
-        cursorAnimationFrameRef.current = null;
-      }
-    };
-  }, [cursorConfig.enabled, cursorState.visible]);
+  };
 
   useEffect(() => {
-    if (!cursorConfig.enabled) {
+    return () => {
+      if (cursorClickTimerRef.current) window.clearTimeout(cursorClickTimerRef.current);
+      if (cursorClickStartTimerRef.current) window.clearTimeout(cursorClickStartTimerRef.current);
+      if (cursorAnimationFrameRef.current) window.cancelAnimationFrame(cursorAnimationFrameRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!cursorEnabled) {
       setCursorState((prev) => ({ ...prev, visible: false, clicking: false }));
       hasPlacedCursorRef.current = false;
       cursorPositionRef.current = { x: 0, y: 0, targetX: 0, targetY: 0 };
@@ -121,21 +163,11 @@ export function useDemoCursor({
     activeStepTypeRef.current = step?.type ?? null;
 
     if (!root || !target) {
-      if (cursorTrackingFrameRef.current) {
-        window.cancelAnimationFrame(cursorTrackingFrameRef.current);
-        cursorTrackingFrameRef.current = null;
-      }
       return;
     }
 
-    const targetElement = root.querySelector<HTMLElement>(`[data-demo="${target}"],[data-demo-id="${target}"]`);
-    if (!targetElement) {
-      if (cursorTrackingFrameRef.current) {
-        window.cancelAnimationFrame(cursorTrackingFrameRef.current);
-        cursorTrackingFrameRef.current = null;
-      }
-      return;
-    }
+    const targetElement = root.querySelector<HTMLElement>(`[demo-id="${target}"]`);
+    if (!targetElement) return;
 
     if (hoveredTargetRef.current && hoveredTargetRef.current !== targetElement) {
       delete hoveredTargetRef.current.dataset.demoHovered;
@@ -177,7 +209,7 @@ export function useDemoCursor({
       const liveRoot = rootRef.current;
       if (!liveRoot) return;
 
-      const liveTarget = liveRoot.querySelector<HTMLElement>(`[data-demo="${target}"],[data-demo-id="${target}"]`);
+      const liveTarget = liveRoot.querySelector<HTMLElement>(`[demo-id="${target}"]`);
       if (!liveTarget) return;
 
       const rootRect = liveRoot.getBoundingClientRect();
@@ -197,18 +229,15 @@ export function useDemoCursor({
     };
 
     syncTargetPosition();
-
-    if (cursorTrackingFrameRef.current) {
-      window.cancelAnimationFrame(cursorTrackingFrameRef.current);
-      cursorTrackingFrameRef.current = null;
-    }
-
-    const trackTarget = () => {
+    kickCursorAnimation();
+    const scrollParent = getScrollParent(targetElement, root);
+    const handlePositionChange = () => {
       syncTargetPosition();
-      cursorTrackingFrameRef.current = window.requestAnimationFrame(trackTarget);
+      kickCursorAnimation();
     };
 
-    cursorTrackingFrameRef.current = window.requestAnimationFrame(trackTarget);
+    scrollParent?.addEventListener("scroll", handlePositionChange, { passive: true });
+    window.addEventListener("resize", handlePositionChange);
 
     setCursorState((prev) => ({
       ...prev,
@@ -238,15 +267,20 @@ export function useDemoCursor({
         cursorClickTimerRef.current = null;
       }, timings.cursorClickPressMs);
     }, timings.cursorClickSettleMs);
+
+    return () => {
+      scrollParent?.removeEventListener("scroll", handlePositionChange);
+      window.removeEventListener("resize", handlePositionChange);
+    };
   }, [cursorConfig.clickPulse, cursorConfig.enabled, currentStepIndex, cursorState.visible, scale, timeline, timings.cursorClickPressMs, timings.cursorClickSettleMs]);
 
   useEffect(() => {
-    if (!cursorConfig.enabled) return;
+    if (!cursorEnabled) return;
     setCursorState((prev) => ({ ...prev, visible: true }));
-  }, [cursorConfig.enabled]);
+  }, [cursorEnabled]);
 
   useEffect(() => {
-    if (!cursorConfig.enabled || hasPlacedCursorRef.current) return;
+    if (!cursorEnabled || hasPlacedCursorRef.current) return;
 
     const root = rootRef.current;
     if (!root) return;
@@ -264,16 +298,12 @@ export function useDemoCursor({
     cursorElementRef.current?.style.setProperty("--cursor-y", `${initialY}px`);
     hasPlacedCursorRef.current = true;
     setCursorState((prev) => ({ ...prev, visible: true }));
-  }, [cursorConfig.enabled, scale, rootRef]);
+  }, [cursorEnabled, scale, rootRef]);
 
   useEffect(() => {
     hasPlacedCursorRef.current = false;
     activeStepTypeRef.current = null;
     cursorPositionRef.current = { x: 0, y: 0, targetX: 0, targetY: 0 };
-    if (cursorTrackingFrameRef.current) {
-      window.cancelAnimationFrame(cursorTrackingFrameRef.current);
-      cursorTrackingFrameRef.current = null;
-    }
     if (hoveredTargetRef.current) {
       delete hoveredTargetRef.current.dataset.demoHovered;
       hoveredTargetRef.current = null;
@@ -282,10 +312,6 @@ export function useDemoCursor({
 
   useEffect(() => {
     return () => {
-      if (cursorTrackingFrameRef.current) {
-        window.cancelAnimationFrame(cursorTrackingFrameRef.current);
-        cursorTrackingFrameRef.current = null;
-      }
       if (hoveredTargetRef.current) {
         delete hoveredTargetRef.current.dataset.demoHovered;
         hoveredTargetRef.current = null;
@@ -301,7 +327,10 @@ export function useDemoCursor({
   };
 
   return {
-    cursorConfig,
+    cursorConfig: {
+      ...cursorConfig,
+      enabled: cursorEnabled,
+    },
     cursorElementRef,
     cursorSrc,
     cursorState,

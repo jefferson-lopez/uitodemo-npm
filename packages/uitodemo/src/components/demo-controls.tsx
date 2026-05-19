@@ -5,6 +5,8 @@ import iconPlayerPlay from "@tabler/icons/outline/player-play.svg";
 import iconRotate from "@tabler/icons/outline/rotate.svg";
 import type { ReactNode } from "react";
 import type { DemoStatus } from "../types";
+import { useDemoPlaybackContext } from "./demo-player-context";
+import DemoProgress from "./demo-progress";
 
 type DemoControlsProps = {
   className?: string;
@@ -23,102 +25,122 @@ type DemoControlsProps = {
 export default function DemoControls({
   className,
   status,
-  progress = 0,
-  elapsedMs = 0,
-  durationMs = 0,
+  progress,
+  elapsedMs,
+  durationMs,
   onPlay,
   onPause,
   onRestart,
   playLabel,
   pauseLabel,
   restartLabel,
-}: DemoControlsProps) {
-  const isPlaying = status === "playing";
-  const visibleProgress = Math.max(0, Math.min(1, progress));
+}: Partial<DemoControlsProps>) {
+  const context = useDemoPlaybackContext();
+  const resolvedStatus = status ?? context?.status ?? "idle";
+  const resolvedProgress = progress ?? context?.progress ?? 0;
+  const resolvedElapsedMs = elapsedMs ?? context?.elapsedMs ?? 0;
+  const resolvedDurationMs = durationMs ?? context?.durationMs ?? 0;
+  const resolvedOnPlay = onPlay ?? context?.play ?? (() => undefined);
+  const resolvedOnPause = onPause ?? context?.pause ?? (() => undefined);
+  const resolvedOnRestart = onRestart ?? context?.restart ?? (() => undefined);
+  const resolvedPlayLabel = playLabel ?? "Play demo";
+  const resolvedPauseLabel = pauseLabel ?? "Pause demo";
+  const resolvedRestartLabel = restartLabel ?? "Restart demo";
+  const isCompoundUsage = Boolean(context && status === undefined && onPlay === undefined);
+  const scale = Math.max(context?.scale ?? 1, 0.01);
+
+  const isPlaying = resolvedStatus === "playing";
+  const rootStyle = isCompoundUsage
+    ? {
+        pointerEvents: "none" as const,
+        position: "absolute" as const,
+        inset: 0,
+        zIndex: 50,
+        display: context?.areControlsVisible ? "flex" : "none",
+        alignItems: "flex-end" as const,
+        opacity: context?.areControlsVisible ? 1 : 0,
+        transition: "opacity 200ms ease-out",
+      }
+    : undefined;
+
+  const innerScaleStyle = isCompoundUsage
+    ? {
+        pointerEvents: "auto" as const,
+        position: "relative" as const,
+        width: `${scale * 100}%`,
+        left: "50%",
+        transform: `translateX(-50%) scale(${1 / scale})`,
+        transformOrigin: "bottom center",
+      }
+    : undefined;
 
   return (
-    <div
-      className={className}
-      style={{
-        width: "100%",
-        color: "white",
-        display: "grid",
-        gap: 12,
-        borderBottomLeftRadius: 18,
-        borderBottomRightRadius: 18,
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          position: "relative",
-          height: 8,
-          borderRadius: 999,
-          background: "rgba(255,255,255,0.22)",
-          overflow: "visible",
-        }}
-      >
+    <div className={className} style={rootStyle}>
+      <div style={innerScaleStyle}>
         <div
-          aria-hidden="true"
           style={{
-            width: `${visibleProgress * 100}%`,
-            height: "100%",
-            borderRadius: 999,
-            background: "rgba(255,255,255,0.92)",
-            transition: "width 75ms linear",
+            position: "relative",
+            width: "100%",
+            padding: isCompoundUsage ? "16px 20px 20px" : undefined,
+            background: isCompoundUsage
+              ? "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.16) 35%, rgba(0,0,0,0.38) 100%)"
+              : undefined,
           }}
-        />
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: `calc(${visibleProgress * 100}% - 6px)`,
-            width: 12,
-            height: 12,
-            borderRadius: "50%",
-            background: "white",
-            boxShadow: "0 0 0 4px rgba(255,255,255,0.16)",
-            transform: "translateY(-50%)",
-            transition: "left 75ms linear",
-          }}
-        />
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr auto 1fr",
-          alignItems: "center",
-          gap: 16,
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "flex-start" }}>
-          <IconButton label={restartLabel} onClick={onRestart} icon={<RotateIcon />} />
-        </div>
-        <div style={{ display: "flex", justifyContent: "center" }}>
-          <IconButton
-            label={isPlaying ? pauseLabel : playLabel}
-            onClick={isPlaying ? onPause : onPlay}
-            icon={isPlaying ? <PauseIcon /> : <PlayIcon />}
-            size={44}
-          />
-        </div>
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        >
           <div
             style={{
-              minHeight: 40,
-              display: "inline-flex",
-              alignItems: "center",
-              padding: "0 12px",
-              borderRadius: 999,
-              border: "1px solid rgba(255,255,255,0.22)",
-              background: "rgba(17,17,17,0.72)",
-              fontSize: 14,
-              fontVariantNumeric: "tabular-nums",
+              width: "100%",
+              color: "white",
+              display: "grid",
+              gap: 12,
+              borderBottomLeftRadius: 18,
+              borderBottomRightRadius: 18,
+              overflow: "hidden",
             }}
           >
-            {formatPlayerTime(elapsedMs)} / {formatPlayerTime(durationMs)}
+            <DemoProgress progress={resolvedProgress} />
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr auto 1fr",
+                alignItems: "center",
+                gap: 16,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                <IconButton
+                  label={resolvedRestartLabel}
+                  onClick={resolvedOnRestart}
+                  icon={<RotateIcon />}
+                />
+              </div>
+              <div style={{ display: "flex", justifyContent: "center" }}>
+                <IconButton
+                  label={isPlaying ? resolvedPauseLabel : resolvedPlayLabel}
+                  onClick={isPlaying ? resolvedOnPause : resolvedOnPlay}
+                  icon={isPlaying ? <PauseIcon /> : <PlayIcon />}
+                  size={44}
+                />
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <div
+                  style={{
+                    minHeight: 40,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "0 12px",
+                    borderRadius: 999,
+                    border: "1px solid rgba(255,255,255,0.22)",
+                    background: "rgba(17,17,17,0.72)",
+                    fontSize: 14,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {formatPlayerTime(resolvedElapsedMs)} / {formatPlayerTime(resolvedDurationMs)}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

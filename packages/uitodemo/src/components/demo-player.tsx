@@ -1,15 +1,29 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  Children,
+  isValidElement,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { DEFAULT_DEMO_TIMINGS, FRAME_BORDER_RADIUS_MAP, ROOT_DEMO_TARGET, resolveDemoTimeline } from "../config/defaults";
 import { useDemoController } from "../hooks/use-demo-controller";
 import { useDemoCursor } from "../hooks/use-demo-cursor";
 import { useTimeline } from "../hooks/use-timeline";
 import type { DemoPlayerProps } from "../types";
 import DemoControls from "./demo-controls";
+import DemoOverlay from "./demo-overlay";
+import { DemoPlaybackProvider, DemoStageProvider } from "./demo-player-context";
+import DemoProgress from "./demo-progress";
+import DemoStage from "./demo-stage";
 
 export default function DemoPlayer({
   timeline,
+  steps,
   isActive,
   activationDelayMs = 0,
   introAnimationMs = 300,
@@ -18,7 +32,10 @@ export default function DemoPlayer({
   baseHeight = 750,
   frameBorderRadius = "xl",
   defaultScale = 0.9,
+  padded = true,
+  showFrame = true,
   showControls = true,
+  showCenterOverlayButton = true,
   cursor = false,
   timings,
   onStatusChange,
@@ -47,7 +64,8 @@ export default function DemoPlayer({
     () => ({ ...DEFAULT_DEMO_TIMINGS, ...timings }),
     [timings],
   );
-  const baseTimeline = useTimeline(timeline);
+  const authoredTimeline = timeline ?? steps ?? [];
+  const baseTimeline = useTimeline(authoredTimeline);
   const cursorEnabled =
     typeof cursor === "boolean" ? cursor : (cursor.enabled ?? true);
   const resolvedTimeline = useMemo(
@@ -89,7 +107,8 @@ export default function DemoPlayer({
   const areControlsVisible =
     showControls &&
     (status === "paused" || status === "completed" || hasPointerActivity);
-  const showCenterOverlayButton = status !== "playing";
+  const shouldShowCenterOverlayButton =
+    showCenterOverlayButton && status !== "playing";
 
   useEffect(() => {
     onStatusChange?.(status);
@@ -222,7 +241,7 @@ export default function DemoPlayer({
     width: "100%",
     height: `${baseHeight * (scale ?? 1)}px`,
     visibility: scale === null ? "hidden" : "visible",
-    padding: 20,
+    padding: padded ? 20 : 0,
   };
 
   const stageStyle: CSSProperties = {
@@ -235,6 +254,93 @@ export default function DemoPlayer({
     transformOrigin: "top center",
   };
 
+  const surfaceStyle: CSSProperties = {
+    position: "relative",
+    isolation: "isolate",
+    minHeight: 0,
+    height: "100%",
+    userSelect: "none",
+    outline: "none",
+    overflow: "hidden",
+    background: "var(--uitodemo-surface, white)",
+    borderRadius: showFrame
+      ? Math.max(0, resolvedFrameBorderRadius - 2)
+      : resolvedFrameBorderRadius,
+    border: showFrame ? "1px solid rgba(0,0,0,0.08)" : undefined,
+  };
+
+  const childArray = Children.toArray(children);
+  const usesCompoundApi = childArray.some((child) =>
+    isValidElement(child) &&
+    (child.type === DemoStage ||
+      child.type === DemoOverlay ||
+      child.type === DemoControls ||
+      child.type === DemoProgress),
+  );
+
+  const stageContextValue = useMemo(() => ({
+    rootRef,
+    runnerVersion,
+    status,
+    play,
+    pause,
+    stageStyle: surfaceStyle,
+    markPointerActivity,
+    clearPointerActivity,
+    setIsPointerInsideDemo,
+    userPointerDownRef,
+    hideNativeCursor:
+      cursorConfig.hideNativeCursor && isPointerInsideDemo,
+  }), [
+    clearPointerActivity,
+    cursorConfig.hideNativeCursor,
+    isPointerInsideDemo,
+    markPointerActivity,
+    pause,
+    play,
+    runnerVersion,
+    setIsPointerInsideDemo,
+    status,
+    surfaceStyle,
+  ]);
+
+  const playbackContextValue = useMemo(() => ({
+    cursorElementRef,
+    status,
+    progress,
+    elapsedMs,
+    durationMs,
+    play,
+    pause,
+    restart,
+    areControlsVisible,
+    showCenterOverlayButton,
+    cursorEnabled: cursorConfig.enabled,
+    cursorVisible: cursorState.visible,
+    cursorClicking: cursorState.clicking,
+    cursorVariant: cursorState.variant,
+    cursorSrc,
+    cursorVisualStyle,
+    scale,
+  }), [
+    areControlsVisible,
+    cursorConfig.enabled,
+    cursorSrc,
+    cursorState.clicking,
+    cursorState.variant,
+    cursorState.visible,
+    cursorVisualStyle,
+    durationMs,
+    elapsedMs,
+    pause,
+    play,
+    progress,
+    restart,
+    scale,
+    showCenterOverlayButton,
+    status,
+  ]);
+
   return (
     <div className={className} style={outerStyle}>
       <div ref={scaleHostRef} style={hostStyle}>
@@ -244,248 +350,79 @@ export default function DemoPlayer({
               height: "100%",
               overflow: "hidden",
               borderRadius: resolvedFrameBorderRadius,
+              background: showFrame
+                ? "linear-gradient(180deg, rgba(235,235,235,1) 0%, rgba(235,235,235,0.95) 62%, rgba(235,235,235,0.88) 100%)"
+                : undefined,
+              padding: showFrame ? 4 : 0,
             }}
           >
-            <div
-              ref={rootRef}
-              style={{
-                position: "relative",
-                isolation: "isolate",
-                minHeight: 0,
-                height: "100%",
-                userSelect: "none",
-                outline: "none",
-                cursor:
-                  cursorConfig.hideNativeCursor && isPointerInsideDemo
-                    ? "none"
-                    : undefined,
-              }}
-              tabIndex={0}
-              onMouseEnter={() => {
-                setIsPointerInsideDemo(true);
-                markPointerActivity();
-              }}
-              onMouseMove={markPointerActivity}
-              onMouseLeave={() => {
-                setIsPointerInsideDemo(false);
-                clearPointerActivity();
-              }}
-              onPointerDown={() => {
-                userPointerDownRef.current = true;
-              }}
-              onClick={(event) => {
-                if (!userPointerDownRef.current) return;
-                userPointerDownRef.current = false;
-                if (!event.isTrusted) return;
-                const target = event.target as HTMLElement | null;
-                if (target?.closest("[data-demo-controls]")) return;
-                if (status === "playing") {
-                  pause();
-                  return;
-                }
-                play();
-              }}
-              onKeyDown={(event) => {
-                if (event.code !== "Space") return;
-                event.preventDefault();
-                if (status === "playing") {
-                  pause();
-                  return;
-                }
-                play();
-              }}
-            >
-              {showControls ? (
-                <div
-                  style={{
-                    pointerEvents: "none",
-                    position: "absolute",
-                    inset: 0,
-                    zIndex: 50,
-                    display: areControlsVisible ? "flex" : "none",
-                    alignItems: "flex-end",
-                    opacity: areControlsVisible ? 1 : 0,
-                    transition: "opacity 200ms ease-out",
-                  }}
-                >
-                  <div
-                    data-demo-controls
-                    style={{
-                      pointerEvents: "auto",
-                      position: "relative",
-                      width: `${Math.max(scale ?? 1, 0.01) * 100}%`,
-                      left: "50%",
-                      transform: `translateX(-50%) scale(${1 / Math.max(scale ?? 1, 0.01)})`,
-                      transformOrigin: "bottom center",
-                    }}
-                  >
-                    <div
-                      style={{
-                        position: "relative",
-                        width: "100%",
-                        padding: "16px 20px 20px",
-                        background:
-                          "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.16) 35%, rgba(0,0,0,0.38) 100%)",
-                      }}
-                    >
-                      {renderControls ? (
-                        renderControls({
-                          status,
-                          progress,
-                          elapsedMs,
-                          durationMs,
-                          play,
-                          pause,
-                          restart,
-                        })
-                      ) : (
-                        <DemoControls
-                          status={status}
-                          progress={progress}
-                          elapsedMs={elapsedMs}
-                          durationMs={durationMs}
-                          onPlay={play}
-                          onPause={pause}
-                          onRestart={restart}
-                          playLabel="Play demo"
-                          pauseLabel="Pause demo"
-                          restartLabel="Restart demo"
-                        />
-                      )}
-                    </div>
-                  </div>
+            <DemoStageProvider value={stageContextValue}>
+              <DemoPlaybackProvider value={playbackContextValue}>
+                <div style={{ position: "relative", height: "100%" }}>
+                  {usesCompoundApi ? (
+                    children
+                  ) : (
+                    <>
+                      <DemoStage>{children}</DemoStage>
+                      <DemoOverlay />
+                      {showControls
+                        ? renderControls
+                          ? (
+                            <div
+                              style={{
+                                pointerEvents: "none",
+                                position: "absolute",
+                                inset: 0,
+                                zIndex: 50,
+                                display: areControlsVisible ? "flex" : "none",
+                                alignItems: "flex-end",
+                                opacity: areControlsVisible ? 1 : 0,
+                                transition: "opacity 200ms ease-out",
+                              }}
+                            >
+                              <div
+                                data-demo-controls
+                                style={{
+                                  pointerEvents: "auto",
+                                  position: "relative",
+                                  width: `${Math.max(scale ?? 1, 0.01) * 100}%`,
+                                  left: "50%",
+                                  transform: `translateX(-50%) scale(${1 / Math.max(scale ?? 1, 0.01)})`,
+                                  transformOrigin: "bottom center",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    position: "relative",
+                                    width: "100%",
+                                    padding: "16px 20px 20px",
+                                    background:
+                                      "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.16) 35%, rgba(0,0,0,0.38) 100%)",
+                                  }}
+                                >
+                                  {renderControls({
+                                    status,
+                                    progress,
+                                    elapsedMs,
+                                    durationMs,
+                                    play,
+                                    pause,
+                                    restart,
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                          : <DemoControls />
+                        : null}
+                    </>
+                  )}
                 </div>
-              ) : null}
-
-              {showCenterOverlayButton ? (
-                <div
-                  style={{
-                    pointerEvents: "none",
-                    position: "absolute",
-                    inset: 0,
-                    zIndex: 50,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: `${Math.max(scale ?? 1, 0.01) * 100}%`,
-                    left: "50%",
-                    transform: `translateX(-50%) scale(${1 / Math.max(scale ?? 1, 0.01)})`,
-                    transformOrigin: "center center",
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (status === "completed") {
-                        restart();
-                        return;
-                      }
-                      play();
-                    }}
-                    aria-label={
-                      status === "completed" ? "Restart demo" : "Play demo"
-                    }
-                    title={
-                      status === "completed" ? "Restart demo" : "Play demo"
-                    }
-                    data-demo-controls
-                    style={{
-                      pointerEvents: "auto",
-                      width: 48,
-                      height: 48,
-                      display: "grid",
-                      placeItems: "center",
-                      borderRadius: "50%",
-                      border: "1px solid rgba(255,255,255,0.16)",
-                      background: "rgba(17,17,17,0.78)",
-                      color: "white",
-                      boxShadow: "0 20px 50px rgba(0,0,0,0.15)",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      aria-hidden="true"
-                      style={{ marginLeft: 2 }}
-                    >
-                      <path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l10.86-6.86a1 1 0 0 0 0-1.72L9.5 4.28A1 1 0 0 0 8 5.14Z" />
-                    </svg>
-                  </button>
-                </div>
-              ) : null}
-
-              <div
-                  data-demo={ROOT_DEMO_TARGET}
-                  key={runnerVersion}
-                style={{ pointerEvents: "none", height: "100%" }}
-              >
-                {children}
-              </div>
-              {cursorConfig.enabled && cursorState.visible ? (
-                <div
-                  aria-hidden="true"
-                  style={{
-                    pointerEvents: "none",
-                    position: "absolute",
-                    inset: 0,
-                    zIndex: 40,
-                  }}
-                >
-                  <div
-                    ref={cursorElementRef}
-                    style={{
-                      position: "absolute",
-                      opacity: cursorState.visible ? 1 : 0,
-                      transform:
-                        "translate3d(var(--cursor-x, 0px), var(--cursor-y, 0px), 0)",
-                      transition:
-                        "opacity 200ms ease-out, transform 200ms ease-out",
-                      willChange: "transform, opacity",
-                    }}
-                  >
-                    <div style={cursorVisualStyle}>
-                      <img
-                        src={cursorSrc}
-                        alt=""
-                        aria-hidden="true"
-                        style={{
-                          width:
-                            cursorState.variant === "pointer" ||
-                            cursorState.variant === "grab"
-                              ? 24
-                              : 22,
-                          height:
-                            cursorState.variant === "pointer" ||
-                            cursorState.variant === "grab"
-                              ? 24
-                              : 22,
-                          display: "block",
-                          userSelect: "none",
-                          transform: cursorState.clicking
-                            ? cursorState.variant === "pointer"
-                              ? "translateY(1px) scale(0.84)"
-                              : "translateY(0.5px) scale(0.92)"
-                            : "translateY(0) scale(1)",
-                          transition: "transform 300ms ease",
-                          animation:
-                            cursorState.variant === "wait"
-                              ? "uitodemo-spin 1s linear infinite"
-                              : undefined,
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
+              </DemoPlaybackProvider>
+            </DemoStageProvider>
           </div>
         </div>
       </div>
-      <style>{`@keyframes uitodemo-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }

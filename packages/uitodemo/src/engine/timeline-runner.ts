@@ -25,15 +25,27 @@ export function createTimelineRunner({
   onProgressChange,
   onTimeChange,
 }: TimelineRunnerOptions) {
+  const TIME_SYNC_INTERVAL_MS = 100;
   let currentStepIndex = 0;
   let status: DemoStatus = "idle";
   let cancelled = false;
   let loopPromise: Promise<void> | null = null;
   let elapsedMs = 0;
+  let lastSyncedElapsedMs = -1;
   const totalDurationMs = getTimelineDuration(timeline, timings);
 
-  const syncTime = () => {
+  const syncTime = (force = false) => {
     const safeElapsedMs = Math.min(elapsedMs, totalDurationMs);
+    if (
+      !force &&
+      lastSyncedElapsedMs >= 0 &&
+      safeElapsedMs < totalDurationMs &&
+      safeElapsedMs - lastSyncedElapsedMs < TIME_SYNC_INTERVAL_MS
+    ) {
+      return;
+    }
+
+    lastSyncedElapsedMs = safeElapsedMs;
     onProgressChange?.(Math.min(1, safeElapsedMs / totalDurationMs));
     onTimeChange?.(safeElapsedMs, totalDurationMs);
   };
@@ -82,7 +94,7 @@ export function createTimelineRunner({
     if (!cancelled) {
       status = "completed";
       elapsedMs = totalDurationMs;
-      syncTime();
+      syncTime(true);
       onStatusChange(status);
     }
   };
@@ -95,7 +107,7 @@ export function createTimelineRunner({
         currentStepIndex = 0;
         elapsedMs = 0;
         onStepChange?.(0);
-        syncTime();
+        syncTime(true);
       }
 
       if (status === "playing") return;
@@ -119,7 +131,7 @@ export function createTimelineRunner({
       currentStepIndex = 0;
       elapsedMs = 0;
       onStepChange?.(0);
-      syncTime();
+      syncTime(true);
       status = "playing";
       onStatusChange(status);
 
@@ -135,7 +147,7 @@ export function createTimelineRunner({
     async seek(targetStepIndex: number, autoplay: boolean) {
       currentStepIndex = 0;
       elapsedMs = 0;
-      syncTime();
+      syncTime(true);
 
       const safeTargetStepIndex = Math.max(
         0,
@@ -166,7 +178,7 @@ export function createTimelineRunner({
       if (currentStepIndex >= timeline.length) {
         status = "completed";
         elapsedMs = totalDurationMs;
-        syncTime();
+        syncTime(true);
         onStatusChange(status);
         return;
       }

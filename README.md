@@ -35,40 +35,81 @@ You can also use `pnpm add uitodemo` or `yarn add uitodemo`.
 
 ## Quick usage
 
-Wrap your UI with `DemoPlayer`, mark the elements you want to target with `data-demo`, and pass a timeline.
+Start with the authoring helpers. They make the API much easier to read.
 
 ```tsx
-import { DemoPlayer, type DemoTimeline } from "uitodemo";
+import { DemoPlayer, demo, demoTarget } from "uitodemo";
 
-const timeline: DemoTimeline = [
-  { type: "focus", target: "search", cursor: "text" },
-  { type: "type", target: "search", value: "Cold brew", delay: 90, cursor: "text" },
-  { type: "wait", delay: 500 },
-  { type: "click", target: "result-1", cursor: "pointer", hover: true },
-];
+const steps = demo()
+  .focus("search", { cursor: "text" })
+  .type("search", "Cold brew", { delay: 90, cursor: "text" })
+  .wait(500)
+  .click("result-1", { cursor: "pointer", hover: true })
+  .build();
 
 export function ProductDemo() {
   return (
     <DemoPlayer
-      timeline={timeline}
+      steps={steps}
       isActive
       cursor={{ enabled: true, hideNativeCursor: true }}
     >
       <div>
-        <input data-demo="search" readOnly defaultValue="" />
-        <button data-demo="result-1">Open product</button>
+        <input {...demoTarget("search")} readOnly defaultValue="" />
+        <button {...demoTarget("result-1")}>Open product</button>
       </div>
     </DemoPlayer>
   );
 }
 ```
 
-## How it works
+## Quick path
 
-1. Render your normal interface inside `DemoPlayer`.
-2. Add `data-demo="some-id"` to the parts of the UI you want to control.
-3. Create a timeline with steps like `focus`, `type`, `scroll`, `click`, and `wait`.
-4. Let `uitodemo` play the sequence for you.
+1. Build steps with `demo()`.
+2. Mark targets with `demoTarget("id")` or `demo-id="id"`.
+3. Pass `steps` or `timeline` into `DemoPlayer`.
+4. Let `uitodemo` play the sequence.
+
+## Recommended convention
+
+Use one convention only:
+
+- write targets with `demoTarget("search")`
+- which renders `demo-id="search"`
+
+That keeps the API easy to remember and avoids “black box” magic.
+
+## Compound API
+
+You can also compose the player in visible pieces:
+
+```tsx
+import {
+  DemoControls,
+  DemoOverlay,
+  DemoPlayer,
+  DemoStage,
+  demo,
+  demoTarget,
+} from "uitodemo";
+
+const steps = demo()
+  .focus("search", { cursor: "text" })
+  .type("search", "Cold brew", { delay: 90, cursor: "text" })
+  .click("result-1", { cursor: "pointer", hover: true })
+  .build();
+
+<DemoPlayer steps={steps} isActive>
+  <DemoStage>
+    <div>
+      <input {...demoTarget("search")} readOnly defaultValue="" />
+      <button {...demoTarget("result-1")}>Open product</button>
+    </div>
+  </DemoStage>
+  <DemoOverlay />
+  <DemoControls />
+</DemoPlayer>;
+```
 
 ## Good use cases
 

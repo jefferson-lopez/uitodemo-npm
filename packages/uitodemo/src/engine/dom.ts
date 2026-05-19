@@ -28,9 +28,7 @@ export function isTextDemoTarget(element: HTMLElement) {
 }
 
 export function getDemoTarget(root: HTMLElement, target: string) {
-  return root.querySelector<HTMLElement>(
-    `[data-demo="${target}"],[data-demo-id="${target}"]`,
-  );
+  return root.querySelector<HTMLElement>(`[demo-id="${target}"]`);
 }
 
 export function setElementValue(element: HTMLElement, value: string) {

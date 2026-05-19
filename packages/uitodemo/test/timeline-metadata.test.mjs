@@ -4,6 +4,8 @@ import {
   DEFAULT_DEMO_TIMINGS,
   FRAME_BORDER_RADIUS_MAP,
   createTimelineRunner,
+  demo,
+  demoTarget,
   getStepDuration,
   getTimelineDuration,
   resolveDemoTimeline,
@@ -159,8 +161,8 @@ function installFakeDomGlobals() {
 function createFakeRoot(targets = {}) {
   return {
     querySelector(selector) {
-      const match = selector.match(/\[data-demo="([^"]+)"\],\[data-demo-id="([^"]+)"\]/);
-      const target = match?.[1] ?? match?.[2];
+      const match = selector.match(/\[demo-id="([^"]+)"\]/);
+      const target = match?.[1];
       return (target && targets[target]) || null;
     },
     getBoundingClientRect() {
@@ -444,4 +446,26 @@ test("createTimelineRunner restart returns to the first step and plays again", a
   assert.equal(statuses.at(-1), "completed");
   assert.deepEqual(steps.slice(0, 3), [0, 0, 0]);
   restoreDomGlobals();
+});
+
+test("demo builder creates a fluent timeline", () => {
+  const timeline = demo()
+    .focus("search", { cursor: "text", label: "Focus search" })
+    .type("search", "Cold brew", { delay: 90, cursor: "text" })
+    .wait(400, { label: "Pause briefly" })
+    .click("cta", { cursor: "pointer", hover: true })
+    .build();
+
+  assert.deepEqual(timeline, [
+    { type: "focus", target: "search", cursor: "text", label: "Focus search" },
+    { type: "type", target: "search", value: "Cold brew", delay: 90, cursor: "text" },
+    { type: "wait", delay: 400, label: "Pause briefly" },
+    { type: "click", target: "cta", cursor: "pointer", hover: true },
+  ]);
+});
+
+test("demoTarget returns the expected data attribute", () => {
+  assert.deepEqual(demoTarget("search"), {
+    "demo-id": "search",
+  });
 });

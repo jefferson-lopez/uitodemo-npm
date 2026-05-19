@@ -2,7 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CopyIcon } from "lucide-react";
-import { DemoPlayer, type DemoStatus, type DemoTimeline } from "uitodemo";
+import {
+  DemoControls,
+  DemoOverlay,
+  DemoPlayer,
+  DemoStage,
+  demo,
+  demoTarget,
+  type DemoStatus,
+} from "uitodemo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,92 +30,70 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
-const timeline: DemoTimeline = [
-  { type: "wait", delay: 900, label: "Settle frame" },
-  { type: "focus", target: "search", cursor: "text", label: "Focus search" },
-  {
-    type: "type",
-    target: "search",
-    value: "Cold",
+const steps = demo()
+  .wait(900, { label: "Settle frame" })
+  .focus("search", { cursor: "text", label: "Focus search" })
+  .type("search", "Cold", {
     delay: 120,
     cursor: "text",
     label: "Type first term",
-  },
-  { type: "wait", delay: 520, label: "Think before typing" },
-  {
-    type: "type",
-    target: "search",
-    value: " brew bottle",
+  })
+  .wait(520, { label: "Think before typing" })
+  .type("search", " brew bottle", {
     delay: 92,
     cursor: "text",
     label: "Complete search",
-  },
-  { type: "wait", delay: 900, label: "Scan matches" },
-  {
-    type: "click",
-    target: "filter-ready",
+  })
+  .wait(900, { label: "Scan matches" })
+  .click("filter-ready", {
     cursor: "pointer",
     hover: true,
     label: "Toggle availability",
-  },
-  { type: "wait", delay: 700, label: "Review filters" },
-  {
-    type: "click",
-    target: "product-2",
+  })
+  .wait(700, { label: "Review filters" })
+  .click("product-2", {
     cursor: "pointer",
     hover: true,
     label: "Open highlighted item",
-  },
-  { type: "wait", delay: 720, label: "Inspect product card" },
-  {
-    type: "click",
-    target: "quick-restock",
+  })
+  .wait(720, { label: "Inspect product card" })
+  .click("quick-restock", {
     cursor: "pointer",
     hover: true,
     label: "Check quick action",
-  },
-  { type: "wait", delay: 620, label: "Review quick action" },
-  {
-    type: "click",
-    target: "remove-product-2",
+  })
+  .wait(620, { label: "Review quick action" })
+  .click("remove-product-2", {
     cursor: "pointer",
     hover: true,
     label: "Remove highlighted product",
-  },
-  { type: "wait", delay: 620, label: "Confirm action" },
-  {
-    type: "scroll",
-    target: "product-8",
+  })
+  .wait(620, { label: "Confirm action" })
+  .scroll("product-8", {
     align: "center",
     delay: 950,
     cursor: "arrow",
     label: "Scroll deeper into catalog",
-  },
-  {
-    type: "click",
-    target: "product-8",
+  })
+  .click("product-8", {
     cursor: "pointer",
     hover: true,
     label: "Inspect lower product",
-  },
-  { type: "wait", delay: 680, label: "Review lower item" },
-  {
-    type: "scroll",
-    target: "catalog-top",
+  })
+  .wait(680, { label: "Review lower item" })
+  .scroll("catalog-top", {
     align: "start",
     delay: 850,
     cursor: "arrow",
     label: "Return to top action",
-  },
-  {
-    type: "click",
-    target: "add-product",
+  })
+  .click("add-product", {
     cursor: "pointer",
     hover: true,
     label: "Add new product",
-  },
-  { type: "wait", delay: 1400, label: "Land on call to action" },
-];
+  })
+  .wait(1400, { label: "Land on call to action" })
+  .build();
 
 const initialProducts = [
   {
@@ -193,17 +179,28 @@ const initialProducts = [
 ];
 
 const installSnippet = "pnpm add uitodemo";
-const exampleSnippet = `import { DemoPlayer, type DemoTimeline } from "uitodemo";
+const exampleSnippet = `import {
+  DemoControls,
+  DemoOverlay,
+  DemoPlayer,
+  DemoStage,
+  demo,
+  demoTarget,
+} from "uitodemo";
 
-const timeline: DemoTimeline = [
-  { type: "focus", target: "search", cursor: "text" },
-  { type: "type", target: "search", value: "Cold brew", delay: 90, cursor: "text" },
-  { type: "scroll", target: "product-8", align: "center", delay: 700 },
-  { type: "click", target: "product-8", cursor: "pointer", hover: true },
-];
+const steps = demo()
+  .focus("search", { cursor: "text" })
+  .type("search", "Cold brew", { delay: 90, cursor: "text" })
+  .scroll("product-8", { align: "center", delay: 700 })
+  .click("product-8", { cursor: "pointer", hover: true })
+  .build();
 
-<DemoPlayer timeline={timeline} isActive cursor>
-  <YourProductUI />
+<DemoPlayer steps={steps} isActive cursor>
+  <DemoStage>
+    <YourProductUI />
+  </DemoStage>
+  <DemoOverlay />
+  <DemoControls />
 </DemoPlayer>`;
 
 const points = [
@@ -378,7 +375,7 @@ export default function HomePage() {
 
           <div className="rounded-3xl bg-card p-4 shadow-sm">
             <DemoPlayer
-              timeline={timeline}
+              steps={steps}
               isActive
               frameBorderRadius="lg"
               className="overflow-hidden rounded-3xl"
@@ -401,10 +398,8 @@ export default function HomePage() {
                 hideNativeCursor: false,
               }}
             >
-              <div
-                data-demo="app"
-                className="grid h-full min-h-0 grid-cols-[220px_minmax(0,1fr)] overflow-hidden rounded-3xl border bg-muted/30"
-              >
+              <DemoStage>
+                <div className="grid h-full min-h-0 grid-cols-[220px_minmax(0,1fr)] overflow-hidden rounded-3xl border bg-muted/30">
                 <aside className="flex h-full min-h-0 flex-col border-r bg-muted/50">
                   <div className="flex h-full min-h-0 flex-col p-5">
                     <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-sm text-primary-foreground">
@@ -470,7 +465,7 @@ export default function HomePage() {
                 </aside>
 
                 <div className="h-full min-h-0 overflow-y-auto p-6">
-                  <div data-demo="catalog-top" className="h-px w-full" />
+                  <div {...demoTarget("catalog-top")} className="h-px w-full" />
                   <header className="mb-5 flex items-center justify-between gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground">
@@ -480,7 +475,7 @@ export default function HomePage() {
                     </div>
                     <Button
                       type="button"
-                      data-demo="add-product"
+                      {...demoTarget("add-product")}
                       onClick={() => {
                         setItems((current) => {
                           const nextId = `product-${nextProductIdRef.current}`;
@@ -532,13 +527,13 @@ export default function HomePage() {
                     </Button>
                     <Button
                       type="button"
+                      {...demoTarget("filter-ready")}
                       onClick={() => {
                         setActiveFilter("ready");
                         setStatusMessage("Filtered to ready stock.");
                         setStatusDelta("Only in-stock items");
                       }}
                       variant={activeFilter === "ready" ? "default" : "outline"}
-                      data-demo="filter-ready"
                     >
                       Ready stock
                     </Button>
@@ -560,7 +555,7 @@ export default function HomePage() {
                   <label className="mb-4 block">
                     <span className="mb-2 block text-sm">Search</span>
                     <Input
-                      data-demo="search"
+                      {...demoTarget("search")}
                       defaultValue=""
                       readOnly
                       placeholder="Search product"
@@ -586,7 +581,7 @@ export default function HomePage() {
                           ].join(" ")}
                         >
                           <div
-                            data-demo={product.id}
+                            {...demoTarget(product.id)}
                             className="flex items-center justify-between gap-4"
                             onClick={() => {
                               setSelectedProductId(product.id);
@@ -613,7 +608,7 @@ export default function HomePage() {
                                 <div className="mt-2 flex items-center justify-end gap-2">
                                   <Button
                                     type="button"
-                                    data-demo="quick-restock"
+                                    {...demoTarget("quick-restock")}
                                     onClick={(event) => {
                                       event.stopPropagation();
                                       setItems((current) =>
@@ -639,7 +634,7 @@ export default function HomePage() {
                                   </Button>
                                   <Button
                                     type="button"
-                                    data-demo="remove-product-2"
+                                    {...demoTarget("remove-product-2")}
                                     onClick={(event) => {
                                       event.stopPropagation();
                                       setItems((current) =>
@@ -676,6 +671,9 @@ export default function HomePage() {
                   </div>
                 </div>
               </div>
+              </DemoStage>
+              <DemoOverlay />
+              <DemoControls />
             </DemoPlayer>
           </div>
         </section>

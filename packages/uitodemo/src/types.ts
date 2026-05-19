@@ -80,7 +80,7 @@ export type DemoStep = {
    */
   type: DemoStepType;
   /**
-   * Target id matched against `data-demo` or `data-demo-id`.
+   * Target id matched against `demo-id`.
    *
    * Required for `click`, `focus`, `highlight`, `scroll`, and `type` steps.
    * Ignored by `wait` steps.
@@ -158,6 +158,22 @@ export type DemoStep = {
  * ```
  */
 export type DemoTimeline = DemoStep[];
+
+/**
+ * Relative rectangle of the currently highlighted demo target.
+ *
+ * Reserved for consumers that want to render their own spotlight/highlight UI
+ * around the active target.
+ */
+export type DemoHighlightState = {
+  target: string;
+  rect: {
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+  };
+} | null;
 
 /**
  * Read-only playback snapshot exposed to consumers.
@@ -295,7 +311,7 @@ export type DemoPlayerControlsRenderProps = DemoPlaybackSnapshot & {
  * Public props for the DemoPlayer component.
  *
  * `DemoPlayer` renders your real UI inside a fixed-size stage, then replays a
- * timeline against elements identified by `data-demo` or `data-demo-id`.
+ * timeline against elements identified by `demo-id`.
  */
 export type DemoPlayerProps = {
   /**
@@ -322,7 +338,24 @@ export type DemoPlayerProps = {
    * ]}
    * ```
    */
-  timeline: DemoTimeline;
+  timeline?: DemoTimeline;
+  /**
+   * Alias for `timeline` aimed at simpler authoring.
+   *
+   * Use this when you want a friendlier prop name without changing the step
+   * format itself. If both `timeline` and `steps` are provided, `timeline`
+   * wins.
+   *
+   * @example
+   * ```tsx
+   * steps={[
+   *   { type: "focus", target: "search", cursor: "text" },
+   *   { type: "type", target: "search", value: "Coffee", delay: 90, cursor: "text" },
+   *   { type: "click", target: "submit", cursor: "pointer", hover: true },
+   * ]}
+   * ```
+   */
+  steps?: DemoTimeline;
   /**
    * Enables playback when true.
    *
@@ -393,6 +426,22 @@ export type DemoPlayerProps = {
    */
   defaultScale?: number;
   /**
+   * Adds outer stage padding around the scaled demo surface.
+   *
+   * When false, the player uses a tighter edge-to-edge layout.
+   *
+   * @default true
+   */
+  padded?: boolean;
+  /**
+   * Renders the framed shell around the demo surface.
+   *
+   * When false, only the inner demo surface is rendered.
+   *
+   * @default true
+   */
+  showFrame?: boolean;
+  /**
    * Shows built-in playback controls.
    *
    * When false, neither the bottom controls nor the center play button are shown.
@@ -400,6 +449,14 @@ export type DemoPlayerProps = {
    * @default true
    */
   showControls?: boolean;
+  /**
+   * Shows the centered play/restart overlay button when playback is not active.
+   *
+   * This is independent from `showControls`.
+   *
+   * @default true
+   */
+  showCenterOverlayButton?: boolean;
   /**
    * Enables the simulated cursor or provides cursor configuration.
    *
@@ -455,7 +512,7 @@ export type DemoPlayerProps = {
   /**
    * Real UI rendered inside the simulated demo surface.
    *
-   * Add `data-demo="your-id"` to elements you want the timeline to target.
+   * Add `demo-id="your-id"` to elements you want the timeline to target.
    */
   children: ReactNode;
 };
