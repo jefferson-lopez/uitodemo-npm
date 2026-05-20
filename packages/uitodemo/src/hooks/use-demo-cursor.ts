@@ -257,7 +257,7 @@ export function useDemoCursor({
       cursorClickTimerRef.current = null;
     }
 
-    setCursorState((prev) => ({ ...prev, clicking: false }));
+    setCursorState((prev) => (prev.clicking ? { ...prev, clicking: false } : prev));
     cursorClickStartTimerRef.current = window.setTimeout(() => {
       setCursorState((prev) => ({ ...prev, clicking: true }));
       cursorClickStartTimerRef.current = null;
@@ -272,7 +272,15 @@ export function useDemoCursor({
       scrollParent?.removeEventListener("scroll", handlePositionChange);
       window.removeEventListener("resize", handlePositionChange);
     };
-  }, [cursorConfig.clickPulse, cursorConfig.enabled, currentStepIndex, cursorState.visible, scale, timeline, timings.cursorClickPressMs, timings.cursorClickSettleMs]);
+  }, [
+    cursorConfig.clickPulse,
+    cursorEnabled,
+    currentStepIndex,
+    scale,
+    timeline,
+    timings.cursorClickPressMs,
+    timings.cursorClickSettleMs,
+  ]);
 
   useEffect(() => {
     if (!cursorEnabled) return;

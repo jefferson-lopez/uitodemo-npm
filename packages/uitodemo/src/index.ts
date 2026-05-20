@@ -9,6 +9,7 @@ export type { DemoBuilder } from "./authoring";
 export type {
   DemoHighlightState,
   DemoCursorConfig,
+  DemoPerformanceProfile,
   DemoCursorVariant,
   DemoPlayerProps,
   DemoRadiusPreset,

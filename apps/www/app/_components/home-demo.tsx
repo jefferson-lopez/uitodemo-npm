@@ -1,0 +1,512 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  DemoControls,
+  DemoOverlay,
+  DemoPlayer,
+  DemoStage,
+  demo,
+  demoTarget,
+  type DemoStatus,
+} from "uitodemo";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+
+const steps = demo()
+  .wait(900, { label: "Settle frame" })
+  .focus("search", { cursor: "text", label: "Focus search" })
+  .type("search", "Cold", {
+    delay: 120,
+    cursor: "text",
+    label: "Type first term",
+  })
+  .wait(520, { label: "Think before typing" })
+  .type("search", " brew bottle", {
+    delay: 92,
+    cursor: "text",
+    label: "Complete search",
+  })
+  .wait(900, { label: "Scan matches" })
+  .click("filter-ready", {
+    cursor: "pointer",
+    hover: true,
+    label: "Toggle availability",
+  })
+  .wait(700, { label: "Review filters" })
+  .click("product-2", {
+    cursor: "pointer",
+    hover: true,
+    label: "Open highlighted item",
+  })
+  .wait(720, { label: "Inspect product card" })
+  .click("quick-restock", {
+    cursor: "pointer",
+    hover: true,
+    label: "Check quick action",
+  })
+  .wait(620, { label: "Review quick action" })
+  .click("remove-product-2", {
+    cursor: "pointer",
+    hover: true,
+    label: "Remove highlighted product",
+  })
+  .wait(620, { label: "Confirm action" })
+  .scroll("product-8", {
+    align: "center",
+    delay: 950,
+    cursor: "arrow",
+    label: "Scroll deeper into catalog",
+  })
+  .click("product-8", {
+    cursor: "pointer",
+    hover: true,
+    label: "Inspect lower product",
+  })
+  .wait(680, { label: "Review lower item" })
+  .scroll("catalog-top", {
+    align: "start",
+    delay: 850,
+    cursor: "arrow",
+    label: "Return to top action",
+  })
+  .click("add-product", {
+    cursor: "pointer",
+    hover: true,
+    label: "Add new product",
+  })
+  .wait(1400, { label: "Land on call to action" })
+  .build();
+
+const initialProducts = [
+  {
+    id: "product-1",
+    name: "Ethiopia Natural",
+    price: "$18.00",
+    stock: "12 bags",
+    tag: "fruity",
+    tone: "light roast",
+  },
+  {
+    id: "product-2",
+    name: "Cold Brew Bottle",
+    price: "$7.50",
+    stock: "24 units",
+    tag: "best seller",
+    tone: "ready to drink",
+  },
+  {
+    id: "product-3",
+    name: "Espresso Blend",
+    price: "$16.00",
+    stock: "8 bags",
+    tag: "signature",
+    tone: "dense crema",
+  },
+  {
+    id: "product-4",
+    name: "Kenya AA",
+    price: "$19.00",
+    stock: "10 bags",
+    tag: "bright",
+    tone: "berry acidity",
+  },
+  {
+    id: "product-5",
+    name: "Oat Latte Mix",
+    price: "$11.00",
+    stock: "18 units",
+    tag: "ready",
+    tone: "barista staple",
+  },
+  {
+    id: "product-6",
+    name: "Decaf Blend",
+    price: "$15.00",
+    stock: "6 bags",
+    tag: "smooth",
+    tone: "low acidity",
+  },
+  {
+    id: "product-7",
+    name: "Cascara Soda",
+    price: "$6.50",
+    stock: "14 units",
+    tag: "seasonal",
+    tone: "sparkling cherry",
+  },
+  {
+    id: "product-8",
+    name: "Colombia Gesha",
+    price: "$24.00",
+    stock: "5 bags",
+    tag: "limited",
+    tone: "floral cup",
+  },
+  {
+    id: "product-9",
+    name: "Mocha Sauce",
+    price: "$9.00",
+    stock: "0 units",
+    tag: "backorder",
+    tone: "restock pending",
+  },
+  {
+    id: "product-10",
+    name: "Brew Filters",
+    price: "$5.00",
+    stock: "40 packs",
+    tag: "supply",
+    tone: "daily essential",
+  },
+];
+
+export default function HomeDemo() {
+  const [items, setItems] = useState(initialProducts);
+  const nextProductIdRef = useRef(initialProducts.length + 1);
+  const [activeSection, setActiveSection] = useState("inventory");
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [statusMessage, setStatusMessage] = useState(
+    "Cold brew is leading conversions this hour.",
+  );
+  const [statusDelta, setStatusDelta] = useState("+12% vs yesterday");
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(
+    null,
+  );
+  const resetTimerRef = useRef<number | null>(null);
+
+  const resetDemoState = () => {
+    setItems(initialProducts);
+    nextProductIdRef.current = initialProducts.length + 1;
+    setActiveSection("inventory");
+    setActiveFilter("all");
+    setStatusMessage("Cold brew is leading conversions this hour.");
+    setStatusDelta("+12% vs yesterday");
+    setSelectedProductId(null);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+    };
+  }, []);
+
+  const visibleItems = useMemo(() => {
+    return items.filter((product) => {
+      if (activeFilter === "ready") {
+        return product.stock !== "0 units";
+      }
+
+      if (activeFilter === "seasonal") {
+        return (
+          product.tag === "fruity" ||
+          product.tag === "signature" ||
+          product.tag === "seasonal"
+        );
+      }
+
+      return true;
+    });
+  }, [activeFilter, items]);
+
+  return (
+    <div className="rounded-3xl bg-card p-4 shadow-sm">
+      <DemoPlayer
+        steps={steps}
+        isActive
+        performanceProfile="marketing"
+        frameBorderRadius="lg"
+        className="overflow-hidden rounded-3xl"
+        onStatusChange={(status: DemoStatus) => {
+          if (resetTimerRef.current) {
+            window.clearTimeout(resetTimerRef.current);
+            resetTimerRef.current = null;
+          }
+
+          if (status === "completed") {
+            resetTimerRef.current = window.setTimeout(() => {
+              resetDemoState();
+              resetTimerRef.current = null;
+            }, 900);
+          }
+        }}
+        cursor={{
+          enabled: true,
+          theme: "black",
+          hideNativeCursor: false,
+        }}
+      >
+        <DemoStage>
+          <div className="grid h-full min-h-0 grid-cols-[220px_minmax(0,1fr)] overflow-hidden rounded-3xl border bg-muted/30">
+            <aside className="flex h-full min-h-0 flex-col border-r bg-muted/50">
+              <div className="flex h-full min-h-0 flex-col p-5">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-sm text-primary-foreground">
+                  UI
+                </div>
+
+                <nav className="mt-6 space-y-2">
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setActiveSection("inventory");
+                      setStatusMessage("Inventory view is active.");
+                    }}
+                    variant={activeSection === "inventory" ? "default" : "ghost"}
+                    className="w-full justify-start"
+                  >
+                    Inventory
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setActiveSection("orders");
+                      setStatusMessage("Orders view is active.");
+                    }}
+                    variant={activeSection === "orders" ? "default" : "ghost"}
+                    className="w-full justify-start"
+                  >
+                    Orders
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setActiveSection("customers");
+                      setStatusMessage("Customers view is active.");
+                    }}
+                    variant={activeSection === "customers" ? "default" : "ghost"}
+                    className="w-full justify-start"
+                  >
+                    Customers
+                  </Button>
+                </nav>
+
+                <Card className="mt-auto py-0 shadow-none">
+                  <CardContent className="p-4">
+                    <p className="text-xs text-muted-foreground">
+                      Shift pulse
+                    </p>
+                    <strong className="mt-2 block text-sm">
+                      Steady afternoon traffic
+                    </strong>
+                    <span className="mt-1 block text-sm text-muted-foreground">
+                      Peak expected in 18 min
+                    </span>
+                  </CardContent>
+                </Card>
+              </div>
+            </aside>
+
+            <div className="h-full min-h-0 overflow-y-auto p-6">
+              <div {...demoTarget("catalog-top")} className="h-px w-full" />
+              <header className="mb-5 flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">
+                    Coffee inventory
+                  </p>
+                  <h3 className="text-3xl">Product catalog</h3>
+                </div>
+                <Button
+                  type="button"
+                  {...demoTarget("add-product")}
+                  onClick={() => {
+                    setItems((current) => {
+                      const nextId = `product-${nextProductIdRef.current}`;
+                      nextProductIdRef.current += 1;
+
+                      return [
+                        ...current,
+                        {
+                          id: nextId,
+                          name: "House Blend",
+                          price: "$14.00",
+                          stock: "16 bags",
+                          tag: "new",
+                          tone: "balanced roast",
+                        },
+                      ];
+                    });
+                    setStatusMessage("Added a new product to the catalog.");
+                    setStatusDelta("Inventory updated");
+                  }}
+                >
+                  Add product
+                </Button>
+              </header>
+
+              <Card className="mb-4 py-0 shadow-none">
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">Today</p>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="text-sm">{statusMessage}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {statusDelta}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="mb-4 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setActiveFilter("all");
+                    setStatusMessage("Showing all products.");
+                    setStatusDelta(`${items.length} products visible`);
+                  }}
+                  variant={activeFilter === "all" ? "default" : "outline"}
+                >
+                  All products
+                </Button>
+                <Button
+                  type="button"
+                  {...demoTarget("filter-ready")}
+                  onClick={() => {
+                    setActiveFilter("ready");
+                    setStatusMessage("Filtered to ready stock.");
+                    setStatusDelta("Only in-stock items");
+                  }}
+                  variant={activeFilter === "ready" ? "default" : "outline"}
+                >
+                  Ready stock
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setActiveFilter("seasonal");
+                    setStatusMessage("Filtered to seasonal picks.");
+                    setStatusDelta("Curated selection");
+                  }}
+                  variant={activeFilter === "seasonal" ? "default" : "outline"}
+                >
+                  Seasonal
+                </Button>
+              </div>
+
+              <label className="mb-4 block">
+                <span className="mb-2 block text-sm">Search</span>
+                <Input
+                  {...demoTarget("search")}
+                  defaultValue=""
+                  readOnly
+                  placeholder="Search product"
+                  className="h-12"
+                />
+              </label>
+
+              <div className="grid gap-3 pb-8">
+                {visibleItems.map((product) => {
+                  const featured = product.id === "product-2";
+                  const selected = selectedProductId === product.id;
+
+                  return (
+                    <article
+                      key={product.id}
+                      className={[
+                        "rounded-xl border bg-card p-4",
+                        selected
+                          ? "ring-1 ring-ring"
+                          : featured
+                            ? "bg-muted/40"
+                            : "",
+                      ].join(" ")}
+                    >
+                      <div
+                        {...demoTarget(product.id)}
+                        className="flex items-center justify-between gap-4"
+                        onClick={() => {
+                          setSelectedProductId(product.id);
+                          setStatusMessage(`${product.name} selected.`);
+                          setStatusDelta(product.stock);
+                        }}
+                      >
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-base">{product.name}</p>
+                            <Badge variant="outline">{product.tag}</Badge>
+                          </div>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {product.stock}
+                          </p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {product.tone}
+                          </p>
+                        </div>
+
+                        <div className="text-right">
+                          <p className="text-base">{product.price}</p>
+                          {featured ? (
+                            <div className="mt-2 flex items-center justify-end gap-2">
+                              <Button
+                                type="button"
+                                {...demoTarget("quick-restock")}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setItems((current) =>
+                                    current.map((item) =>
+                                      item.id === "product-2"
+                                        ? {
+                                            ...item,
+                                            stock: "36 units",
+                                            tone: "restocked just now",
+                                          }
+                                        : item,
+                                    ),
+                                  );
+                                  setStatusMessage(
+                                    "Cold Brew Bottle was restocked.",
+                                  );
+                                  setStatusDelta("Stock increased");
+                                }}
+                                variant="outline"
+                                size="sm"
+                              >
+                                Quick restock
+                              </Button>
+                              <Button
+                                type="button"
+                                {...demoTarget("remove-product-2")}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setItems((current) =>
+                                    current.filter(
+                                      (item) => item.id !== "product-2",
+                                    ),
+                                  );
+                                  setSelectedProductId((current) =>
+                                    current === "product-2" ? null : current,
+                                  );
+                                  setStatusMessage(
+                                    "Cold Brew Bottle was removed.",
+                                  );
+                                  setStatusDelta("Catalog updated");
+                                }}
+                                variant="outline"
+                                size="sm"
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          ) : (
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              Updated 8m ago
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </DemoStage>
+        <DemoOverlay />
+        <DemoControls />
+      </DemoPlayer>
+    </div>
+  );
+}

@@ -206,6 +206,14 @@ export type DemoPlaybackSnapshot = {
 };
 
 /**
+ * Built-in performance profiles for the DemoPlayer runtime.
+ *
+ * - `default`: balanced fidelity for docs and rich interactive demos
+ * - `marketing`: lower runtime overhead for landing pages and autoplay heroes
+ */
+export type DemoPerformanceProfile = "default" | "marketing";
+
+/**
  * Visual cursor configuration for the DemoPlayer.
  *
  * This config only affects the simulated cursor layer, not the actual browser
@@ -378,6 +386,24 @@ export type DemoPlayerProps = {
    * @default 300
    */
   introAnimationMs?: number;
+  /**
+   * Built-in runtime tuning profile.
+   *
+   * Use `marketing` for autoplay landing demos where lower CPU usage matters
+   * more than ultra-fine playback fidelity.
+   *
+   * @default "default"
+   */
+  performanceProfile?: DemoPerformanceProfile;
+  /**
+   * Pauses playback while the player is outside the viewport.
+   *
+   * This uses `IntersectionObserver` internally and resumes when the player
+   * becomes visible again, which helps CPU usage on long landing pages.
+   *
+   * @default true
+   */
+  pauseWhenOffscreen?: boolean;
   /**
    * Optional class name for the outer wrapper.
    *

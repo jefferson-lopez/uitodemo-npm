@@ -1,4 +1,10 @@
-import type { DemoRadiusPreset, DemoStep, DemoTimingConfig, DemoTimeline } from "../types";
+import type {
+  DemoPerformanceProfile,
+  DemoRadiusPreset,
+  DemoStep,
+  DemoTimingConfig,
+  DemoTimeline,
+} from "../types";
 
 export const ROOT_DEMO_TARGET = "app";
 
@@ -20,6 +26,39 @@ export const DEFAULT_DEMO_TIMINGS: DemoTimingConfig = {
   cursorStartStepMs: 520,
   pointerActivityMs: 1600,
 };
+
+export type DemoPerformanceTuning = {
+  metricsCommitIntervalMs: number;
+  timeSyncIntervalMs: number;
+  pausePollIntervalMs: number;
+  typeChunkSize: number;
+  inViewAmount: number;
+  cursorClickPulseDefault: boolean;
+};
+
+export function getDemoPerformanceTuning(
+  profile: DemoPerformanceProfile = "default",
+): DemoPerformanceTuning {
+  if (profile === "marketing") {
+    return {
+      metricsCommitIntervalMs: 500,
+      timeSyncIntervalMs: 500,
+      pausePollIntervalMs: 200,
+      typeChunkSize: 3,
+      inViewAmount: 0.2,
+      cursorClickPulseDefault: false,
+    };
+  }
+
+  return {
+    metricsCommitIntervalMs: 250,
+    timeSyncIntervalMs: 250,
+    pausePollIntervalMs: 125,
+    typeChunkSize: 1,
+    inViewAmount: 0.2,
+    cursorClickPulseDefault: true,
+  };
+}
 
 export function resolveDemoTimeline(
   timeline: DemoTimeline,

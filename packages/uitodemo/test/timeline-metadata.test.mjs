@@ -413,6 +413,42 @@ test("createTimelineRunner seek applies prior type steps instantly", async () =>
   restoreDomGlobals();
 });
 
+test("createTimelineRunner can batch typing work for lighter marketing playback", async () => {
+  const restoreDomGlobals = installFakeDomGlobals();
+  const input = createFakeElement({
+    tag: "input",
+    dataset: { demo: "search" },
+  });
+  let inputEvents = 0;
+  input.addEventListener("input", () => {
+    inputEvents += 1;
+  });
+  Object.setPrototypeOf(input, globalThis.HTMLInputElement.prototype);
+
+  const statuses = [];
+  const runner = createTimelineRunner({
+    root: createFakeRoot({ search: input }),
+    timeline: [{ type: "type", target: "search", value: "Cold brew", delay: 5 }],
+    timings: {
+      ...DEFAULT_DEMO_TIMINGS,
+      typeSettleMs: 5,
+    },
+    metricsConfig: {
+      typeChunkSize: 3,
+      timeSyncIntervalMs: 5,
+      pausePollIntervalMs: 5,
+    },
+    onStatusChange: (status) => statuses.push(status),
+  });
+
+  runner.play();
+  await waitForStatus(statuses, "completed");
+
+  assert.equal(input.value, "Cold brew");
+  assert.ok(inputEvents < "Cold brew".length + 2);
+  restoreDomGlobals();
+});
+
 test("createTimelineRunner restart returns to the first step and plays again", async () => {
   const restoreDomGlobals = installFakeDomGlobals();
   const clicked = [];

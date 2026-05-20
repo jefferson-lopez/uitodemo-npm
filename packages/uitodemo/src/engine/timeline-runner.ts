@@ -10,6 +10,11 @@ type TimelineRunnerOptions = {
   root: HTMLElement;
   timeline: DemoTimeline;
   timings: DemoTimingConfig;
+  metricsConfig?: {
+    timeSyncIntervalMs?: number;
+    pausePollIntervalMs?: number;
+    typeChunkSize?: number;
+  };
   onStatusChange: (status: DemoStatus) => void;
   onStepChange?: (stepIndex: number) => void;
   onProgressChange?: (progress: number) => void;
@@ -20,12 +25,15 @@ export function createTimelineRunner({
   root,
   timeline,
   timings,
+  metricsConfig,
   onStatusChange,
   onStepChange,
   onProgressChange,
   onTimeChange,
 }: TimelineRunnerOptions) {
-  const TIME_SYNC_INTERVAL_MS = 100;
+  const TIME_SYNC_INTERVAL_MS = metricsConfig?.timeSyncIntervalMs ?? 250;
+  const PAUSE_POLL_INTERVAL_MS = metricsConfig?.pausePollIntervalMs ?? 125;
+  const TYPE_CHUNK_SIZE = metricsConfig?.typeChunkSize ?? 1;
   let currentStepIndex = 0;
   let status: DemoStatus = "idle";
   let cancelled = false;
@@ -55,11 +63,11 @@ export function createTimelineRunner({
 
     while (!cancelled && remaining > 0) {
       if (status === "paused") {
-        await sleep(50);
+        await sleep(PAUSE_POLL_INTERVAL_MS);
         continue;
       }
 
-      const chunk = Math.min(remaining, 50);
+      const chunk = Math.min(remaining, TIME_SYNC_INTERVAL_MS);
       await sleep(chunk);
       elapsedMs += chunk;
       syncTime();
@@ -72,7 +80,7 @@ export function createTimelineRunner({
   const run = async () => {
     while (!cancelled && currentStepIndex < timeline.length) {
       if (status === "paused") {
-        await sleep(50);
+        await sleep(PAUSE_POLL_INTERVAL_MS);
         continue;
       }
 
@@ -84,6 +92,7 @@ export function createTimelineRunner({
         getTarget: (target) => getDemoTarget(root, target),
         wait,
         timings,
+        typeChunkSize: TYPE_CHUNK_SIZE,
       });
 
       if (!completedStep || cancelled) return;
@@ -163,6 +172,7 @@ export function createTimelineRunner({
           getTarget: (target) => getDemoTarget(root, target),
           wait,
           timings,
+          typeChunkSize: TYPE_CHUNK_SIZE,
           instant: true,
         });
 

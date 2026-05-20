@@ -6,6 +6,7 @@ type DemoActionContext = {
   getTarget: (target: string) => HTMLElement | null;
   wait: (ms: number) => Promise<boolean>;
   timings: DemoTimingConfig;
+  typeChunkSize?: number;
   instant?: boolean;
 };
 
@@ -112,10 +113,11 @@ async function typeIntoTarget(step: DemoStep, context: DemoActionContext) {
   }
 
   const baseDelay = step.delay ?? 80;
+  const chunkSize = Math.max(1, context.typeChunkSize ?? 1);
   let typedValue = "";
 
-  for (let index = 0; index < value.length; index += 1) {
-    typedValue = `${typedValue}${value[index]}`;
+  for (let index = 0; index < value.length; index += chunkSize) {
+    typedValue = `${typedValue}${value.slice(index, index + chunkSize)}`;
     setElementValue(element, typedValue);
     dispatchInputEvents(element);
     setElementValue(element, `${typedValue}|`);

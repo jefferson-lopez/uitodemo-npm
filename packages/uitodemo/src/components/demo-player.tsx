@@ -10,9 +10,16 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { DEFAULT_DEMO_TIMINGS, FRAME_BORDER_RADIUS_MAP, ROOT_DEMO_TARGET, resolveDemoTimeline } from "../config/defaults";
+import {
+  DEFAULT_DEMO_TIMINGS,
+  FRAME_BORDER_RADIUS_MAP,
+  getDemoPerformanceTuning,
+  ROOT_DEMO_TARGET,
+  resolveDemoTimeline,
+} from "../config/defaults";
 import { useDemoController } from "../hooks/use-demo-controller";
 import { useDemoCursor } from "../hooks/use-demo-cursor";
+import { useElementInView } from "../hooks/use-element-in-view";
 import { useTimeline } from "../hooks/use-timeline";
 import type { DemoPlayerProps } from "../types";
 import DemoControls from "./demo-controls";
@@ -27,6 +34,7 @@ export default function DemoPlayer({
   isActive,
   activationDelayMs = 0,
   introAnimationMs = 300,
+  performanceProfile = "default",
   className,
   baseWidth = 1275,
   baseHeight = 750,
@@ -37,6 +45,7 @@ export default function DemoPlayer({
   showControls = true,
   showCenterOverlayButton = true,
   cursor = false,
+  pauseWhenOffscreen = true,
   timings,
   onStatusChange,
   onPlaybackChange,
@@ -57,8 +66,31 @@ export default function DemoPlayer({
   const [showIntroAnimation, setShowIntroAnimation] = useState(
     introAnimationMs > 0,
   );
+  const performanceTuning = useMemo(
+    () => getDemoPerformanceTuning(performanceProfile),
+    [performanceProfile],
+  );
+  const resolvedCursor = useMemo(() => {
+    if (typeof cursor === "boolean") {
+      if (!cursor) return false;
 
-  const resolvedIsActive = isActive && isPlaybackReady;
+      return {
+        enabled: true,
+        clickPulse: performanceTuning.cursorClickPulseDefault,
+      };
+    }
+
+    return {
+      ...cursor,
+      clickPulse: cursor.clickPulse ?? performanceTuning.cursorClickPulseDefault,
+    };
+  }, [cursor, performanceTuning.cursorClickPulseDefault]);
+  const isInView = useElementInView(scaleHostRef, {
+    amount: performanceTuning.inViewAmount,
+  });
+
+  const resolvedIsActive =
+    isActive && isPlaybackReady && (!pauseWhenOffscreen || isInView);
   const resolvedFrameBorderRadius = FRAME_BORDER_RADIUS_MAP[frameBorderRadius];
   const resolvedTimings = useMemo(
     () => ({ ...DEFAULT_DEMO_TIMINGS, ...timings }),
@@ -67,10 +99,24 @@ export default function DemoPlayer({
   const authoredTimeline = timeline ?? steps ?? [];
   const baseTimeline = useTimeline(authoredTimeline);
   const cursorEnabled =
-    typeof cursor === "boolean" ? cursor : (cursor.enabled ?? true);
+    typeof resolvedCursor === "boolean"
+      ? resolvedCursor
+      : (resolvedCursor.enabled ?? true);
   const resolvedTimeline = useMemo(
     () => resolveDemoTimeline(baseTimeline, cursorEnabled, resolvedTimings),
     [baseTimeline, cursorEnabled, resolvedTimings],
+  );
+  const runnerMetricsConfig = useMemo(
+    () => ({
+      timeSyncIntervalMs: performanceTuning.timeSyncIntervalMs,
+      pausePollIntervalMs: performanceTuning.pausePollIntervalMs,
+      typeChunkSize: performanceTuning.typeChunkSize,
+    }),
+    [
+      performanceTuning.pausePollIntervalMs,
+      performanceTuning.timeSyncIntervalMs,
+      performanceTuning.typeChunkSize,
+    ],
   );
   const {
     status,
@@ -87,6 +133,8 @@ export default function DemoPlayer({
     timeline: resolvedTimeline,
     isActive: resolvedIsActive,
     timings: resolvedTimings,
+    metricsCommitIntervalMs: performanceTuning.metricsCommitIntervalMs,
+    runnerMetricsConfig,
   });
   const {
     cursorConfig,
@@ -96,7 +144,7 @@ export default function DemoPlayer({
     cursorVisualStyle,
   } = useDemoCursor({
     rootRef,
-    cursor,
+    cursor: resolvedCursor,
     timeline: resolvedTimeline,
     currentStepIndex,
     runnerVersion,

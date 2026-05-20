@@ -9,6 +9,12 @@ type UseDemoControllerOptions = {
   timeline: DemoTimeline;
   isActive: boolean;
   timings: DemoTimingConfig;
+  metricsCommitIntervalMs?: number;
+  runnerMetricsConfig?: {
+    timeSyncIntervalMs?: number;
+    pausePollIntervalMs?: number;
+    typeChunkSize?: number;
+  };
 };
 
 export function useDemoController({
@@ -16,18 +22,50 @@ export function useDemoController({
   timeline,
   isActive,
   timings,
+  metricsCommitIntervalMs = 250,
+  runnerMetricsConfig,
 }: UseDemoControllerOptions) {
   const runnerRef = useRef<ReturnType<typeof createTimelineRunner> | null>(null);
   const shouldAutoplayRef = useRef(isActive);
   const [status, setStatus] = useState<DemoStatus>("idle");
-  const [progress, setProgress] = useState(0);
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const [durationMs, setDurationMs] = useState(0);
+  const [playbackMetrics, setPlaybackMetrics] = useState({
+    progress: 0,
+    elapsedMs: 0,
+    durationMs: 0,
+  });
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [runnerVersion, setRunnerVersion] = useState(0);
   const [seekTargetStepIndex, setSeekTargetStepIndex] = useState<number | null>(
     null,
   );
+  const playbackMetricsRef = useRef(playbackMetrics);
+  const lastMetricsCommitAtRef = useRef(0);
+
+  const commitPlaybackMetrics = (force = false) => {
+    const now =
+      typeof performance !== "undefined" ? performance.now() : Date.now();
+
+    if (
+      !force &&
+      now - lastMetricsCommitAtRef.current < metricsCommitIntervalMs
+    ) {
+      return;
+    }
+
+    lastMetricsCommitAtRef.current = now;
+    setPlaybackMetrics((prev) => {
+      const next = playbackMetricsRef.current;
+      if (
+        prev.progress === next.progress &&
+        prev.elapsedMs === next.elapsedMs &&
+        prev.durationMs === next.durationMs
+      ) {
+        return prev;
+      }
+
+      return next;
+    });
+  };
 
   useEffect(() => {
     shouldAutoplayRef.current = isActive;
@@ -42,9 +80,9 @@ export function useDemoController({
 
     if (!isSeeking) {
       setStatus("idle");
-      setProgress(0);
-      setElapsedMs(0);
-      setDurationMs(0);
+      playbackMetricsRef.current = { progress: 0, elapsedMs: 0, durationMs: 0 };
+      lastMetricsCommitAtRef.current = 0;
+      setPlaybackMetrics(playbackMetricsRef.current);
       setCurrentStepIndex(0);
     }
 
@@ -52,12 +90,29 @@ export function useDemoController({
       root,
       timeline,
       timings,
-      onStatusChange: setStatus,
+      metricsConfig: runnerMetricsConfig,
+      onStatusChange: (nextStatus) => {
+        setStatus(nextStatus);
+        if (nextStatus !== "playing") {
+          commitPlaybackMetrics(true);
+        }
+      },
       onStepChange: setCurrentStepIndex,
-      onProgressChange: setProgress,
+      onProgressChange: (nextProgress) => {
+        playbackMetricsRef.current = {
+          ...playbackMetricsRef.current,
+          progress: nextProgress,
+        };
+      },
       onTimeChange: (nextElapsedMs, nextDurationMs) => {
-        setElapsedMs(nextElapsedMs);
-        setDurationMs(nextDurationMs);
+        playbackMetricsRef.current = {
+          ...playbackMetricsRef.current,
+          elapsedMs: nextElapsedMs,
+          durationMs: nextDurationMs,
+        };
+        commitPlaybackMetrics(
+          nextElapsedMs === 0 || nextElapsedMs === nextDurationMs,
+        );
       },
     });
 
@@ -80,7 +135,16 @@ export function useDemoController({
         runnerRef.current = null;
       }
     };
-  }, [isActive, rootRef, runnerVersion, seekTargetStepIndex, timeline, timings]);
+  }, [
+    isActive,
+    metricsCommitIntervalMs,
+    rootRef,
+    runnerMetricsConfig,
+    runnerVersion,
+    seekTargetStepIndex,
+    timeline,
+    timings,
+  ]);
 
   useEffect(() => {
     const runner = runnerRef.current;
@@ -96,9 +160,9 @@ export function useDemoController({
 
   return {
     status,
-    progress,
-    elapsedMs,
-    durationMs,
+    progress: playbackMetrics.progress,
+    elapsedMs: playbackMetrics.elapsedMs,
+    durationMs: playbackMetrics.durationMs,
     currentStepIndex,
     play: () => runnerRef.current?.play(),
     pause: () => runnerRef.current?.pause(),

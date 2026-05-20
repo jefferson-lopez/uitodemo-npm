@@ -2,7 +2,9 @@
   "name": "www",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 8080",
+    "dev": "next dev --webpack --disable-source-maps --port 8080",
+    "dev:turbo": "next dev --port 8080",
+    "dev:profile": "next dev --webpack --disable-source-maps --experimental-cpu-prof --port 8080",
     "build": "next build",
     "start": "next start --port 8080",
     "typecheck": "tsc --project tsconfig.json --noEmit",
